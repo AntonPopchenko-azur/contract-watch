@@ -1,0 +1,60 @@
+{
+  "before": {
+    "schemaVersion": 1,
+    "source": "synthetic",
+    "capturedAt": "2026-09-30T10:00:00.000Z",
+    "chainId": "9007199254740993",
+    "address": "0x1111111111111111111111111111111111111111",
+    "block": {
+      "number": "0x20000000000001",
+      "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "code": "0x00",
+    "slots": {
+      "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+      "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "after": {
+    "schemaVersion": 1,
+    "source": "synthetic",
+    "capturedAt": "2026-09-30T11:00:00.000Z",
+    "chainId": "9007199254740993",
+    "address": "0x1111111111111111111111111111111111111111",
+    "block": {
+      "number": "0x20000000000001",
+      "hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "code": "0x00",
+    "slots": {
+      "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+      "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "expected": {
+    "kind": "contract-watch-diff",
+    "schemaVersion": 1,
+    "chainId": "9007199254740993",
+    "address": "0x1111111111111111111111111111111111111111",
+    "source": "synthetic",
+    "blocks": {
+      "before": {
+        "number": "0x20000000000001",
+        "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "after": {
+        "number": "0x20000000000001",
+        "hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "changed": false,
+    "changes": [],
+    "notices": [
+      "SAME_HEIGHT_DIFFERENT_HASH"
+    ]
+  },
+  "expectedHuman": "Contract Watch diff | chain 9007199254740993 | 0x1111111111111111111111111111111111111111\nSource: synthetic (demonstration only)\nBlocks: 9007199254740993 -> 9007199254740993\nSame height, different block hashes: possible reorg; this is not evidence of an upgrade.\nNo code or EIP-1967 slot changes.\nObservation: Implementation slot populated; proxy behavior unverified.\nThis comparison is not a contract safety assessment.\n",
+  "expectedSnapshotHuman": "Contract Watch | chain 9007199254740993 | 0x1111111111111111111111111111111111111111\nSource: synthetic (demonstration only)\nBlock: 9007199254740993 (0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb)\nCode: 1 bytes, SHA-256 6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d\nimplementation: 0x2222222222222222222222222222222222222222\nadmin: empty\nbeacon: empty\nImplementation slot populated; proxy behavior unverified.\n"
+}

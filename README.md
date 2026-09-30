@@ -57,6 +57,27 @@ Repeat later with a **new filename**, such as `snapshots/second.json`, then comp
 node bin/contract-watch.js diff snapshots/first.json snapshots/second.json
 ```
 
+For scripts, add `--json` to get one versioned JSON document on stdout:
+
+```sh
+node bin/contract-watch.js diff --json examples/before.json examples/after.json
+```
+
+The report uses `kind: "contract-watch-diff"` and `schemaVersion: 1`, includes
+the target and both blocks, and provides `changed`, structured `changes`, and
+machine-readable `notices`. Chain IDs and block numbers stay strings to preserve
+large integers. It contains no input paths, RPC endpoint, capture timestamps, or
+remote errors. The normal text report is unchanged when `--json` is omitted.
+The flag may appear before, between, or after the two filenames; duplicate or
+unknown flags are rejected. Prefix a filename starting with `--` with `./`.
+
+Both changed and unchanged comparisons still exit **0**, including a comparison
+with a fork/inconsistency notice. On incomparable snapshots, invalid files, or
+other errors, stdout is **empty**, stderr contains the existing safe text error,
+and the exit status is **1**. No partial report or JSON error document is emitted;
+check the exit status before parsing stdout. JSON diff is offline and ignores
+`CONTRACT_WATCH_RPC_URL`. See the [JSON format contract](docs/PROTOCOL.md#json-diff-contract-version-1).
+
 `--rpc URL` overrides `CONTRACT_WATCH_RPC_URL`. Prefer the environment variable for
 key-bearing URLs so the URL is not in CLI arguments; environment variables still
 need to be handled carefully by your shell and process supervisor. The program

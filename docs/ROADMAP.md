@@ -5,7 +5,8 @@ describe the single locally prepared 0.1.0 baseline on 2026-09-30; they do not
 represent five commits or five published releases. Item 06 is confirmed by the
 published baseline; item 07 activates pinned CI and makes both Node.js jobs the
 release gate. The annotated `v0.1.0` tag records the successful verification run.
-Items 08–45 have not started.
+Item 08 adds the versioned offline JSON diff on 2026-09-30.
+Items 09–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -13,7 +14,7 @@ item includes relevant tests and documentation. Keep changes coherent, preserve
 the previous format unless a migration is supplied, and record actual work dates.
 There is no worker-owned scheduler or automatic endless backlog.
 
-## Completed baseline and release setup
+## Completed increments
 
 - [x] **01 — Explicit CLI and input validation.** Node.js 22+, no dependencies,
   exact chain ID arithmetic, address syntax, bounded options and useful help.
@@ -35,11 +36,14 @@ There is no worker-owned scheduler or automatic endless backlog.
   Node.js 22/24 jobs, read-only permissions, offline tests and demo. Require both
   jobs to succeed for the target commit before publishing `v0.1.0`, and record
   the run URL in its annotation; see [release verification](RELEASE.md).
+- [x] **08 — Machine-readable diff.** Add `diff --json` with the independently
+  versioned document format, structured changes and notice codes. Changed,
+  unchanged, forked and incomparable fixtures verify JSON output, safe failure,
+  exact large integers and unchanged human output. Success/error exit codes stay
+  0/1; snapshot version 1 is unchanged. Completed 2026-09-30.
 
 ## Planned increments
 
-- [ ] **08 — Machine-readable diff.** Add stable JSON output with fixtures for
-  changed, unchanged, forked and incomparable inputs; preserve human output.
 - [ ] **09 — Automation exit policy.** Add opt-in distinct status for changes and
   document shell usage without changing the default success status.
 - [ ] **10 — Inspect existing snapshots.** Add an offline report command with

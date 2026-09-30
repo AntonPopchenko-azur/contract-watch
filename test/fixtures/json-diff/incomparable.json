@@ -1,0 +1,37 @@
+{
+  "before": {
+    "schemaVersion": 1,
+    "source": "synthetic",
+    "capturedAt": "2026-09-30T10:00:00.000Z",
+    "chainId": "9007199254740993",
+    "address": "0x1111111111111111111111111111111111111111",
+    "block": {
+      "number": "0x20000000000001",
+      "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "code": "0x00",
+    "slots": {
+      "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+      "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "after": {
+    "schemaVersion": 1,
+    "source": "synthetic",
+    "capturedAt": "2026-09-30T11:00:00.000Z",
+    "chainId": "9007199254740994",
+    "address": "0x1111111111111111111111111111111111111111",
+    "block": {
+      "number": "0x20000000000002",
+      "hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "code": "0x00",
+    "slots": {
+      "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+      "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "errorCode": "INCOMPARABLE"
+}

@@ -21,9 +21,19 @@ export function observation(snapshot) {
   return 'No EIP-1967 target found; other proxy patterns may exist.';
 }
 
-function codeSummary(code) {
+function codeDetails(code) {
   const bytes = Buffer.from(code.slice(2), 'hex');
-  return `${bytes.length} bytes, SHA-256 ${createHash('sha256').update(bytes).digest('hex')}`;
+  return { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+}
+
+function codeSummary({ bytes, sha256 }) {
+  return `${bytes} bytes, SHA-256 ${sha256}`;
+}
+
+function slotDetails(raw) {
+  const status = raw === ZERO_WORD ? 'empty'
+    : raw.startsWith(`0x${'0'.repeat(24)}`) ? 'address' : 'noncanonical';
+  return { raw, status, address: status === 'address' ? `0x${raw.slice(-40)}` : null };
 }
 
 export function snapshotReport(snapshot) {
@@ -32,32 +42,58 @@ export function snapshotReport(snapshot) {
     `Contract Watch | chain ${snapshot.chainId} | ${snapshot.address}`,
     `Source: ${snapshot.source}${snapshot.source === 'synthetic' ? ' (demonstration only)' : ''}`,
     `Block: ${BigInt(snapshot.block.number)} (${snapshot.block.hash})`,
-    `Code: ${codeSummary(snapshot.code)}`,
+    `Code: ${codeSummary(codeDetails(snapshot.code))}`,
     ...Object.keys(SLOTS).map(name => `${name}: ${slotValue(snapshot.slots[name])}`),
     observation(snapshot)
   ].join('\n');
 }
 
-export function compare(before, after) {
+// This document is independently versioned from the input snapshot schema.
+// Only validated, explicitly selected fields are included; never input paths.
+export function diffDocument(before, after) {
   validateSnapshot(before);
   validateSnapshot(after);
   if (before.chainId !== after.chainId || before.address !== after.address || before.source !== after.source) fail('INCOMPARABLE');
   if (BigInt(after.block.number) < BigInt(before.block.number)) fail('ORDER');
   const changes = [];
-  if (before.code !== after.code) changes.push({ field: 'code', before: codeSummary(before.code), after: codeSummary(after.code) });
+  if (before.code !== after.code) changes.push({ field: 'code', before: codeDetails(before.code), after: codeDetails(after.code) });
   for (const name of Object.keys(SLOTS)) {
     if (before.slots[name] !== after.slots[name]) {
-      changes.push({ field: name, before: slotValue(before.slots[name]), after: slotValue(after.slots[name]) });
+      changes.push({ field: name, before: slotDetails(before.slots[name]), after: slotDetails(after.slots[name]) });
     }
   }
   const notices = [];
   if (before.block.number === after.block.number && before.block.hash !== after.block.hash) {
-    notices.push('Same height, different block hashes: possible reorg; this is not evidence of an upgrade.');
+    notices.push('SAME_HEIGHT_DIFFERENT_HASH');
   }
   if (before.block.hash === after.block.hash && (changes.length || before.block.number !== after.block.number)) {
-    notices.push('Same block hash has inconsistent data; check the provider or snapshot files.');
+    notices.push('INCONSISTENT_BLOCK_DATA');
   }
-  return { changes, notices };
+  return {
+    kind: 'contract-watch-diff', schemaVersion: 1,
+    chainId: before.chainId, address: before.address, source: before.source,
+    blocks: {
+      before: { number: before.block.number, hash: before.block.hash },
+      after: { number: after.block.number, hash: after.block.hash }
+    },
+    changed: changes.length > 0, changes, notices
+  };
+}
+
+export function compare(before, after) {
+  const { changes, notices } = diffDocument(before, after);
+  const messages = {
+    SAME_HEIGHT_DIFFERENT_HASH: 'Same height, different block hashes: possible reorg; this is not evidence of an upgrade.',
+    INCONSISTENT_BLOCK_DATA: 'Same block hash has inconsistent data; check the provider or snapshot files.'
+  };
+  return {
+    changes: changes.map(change => ({
+      field: change.field,
+      before: change.field === 'code' ? codeSummary(change.before) : slotValue(change.before.raw),
+      after: change.field === 'code' ? codeSummary(change.after) : slotValue(change.after.raw)
+    })),
+    notices: notices.map(code => messages[code])
+  };
 }
 
 export function diffReport(before, after) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { capture, readSnapshot, saveSnapshot } from '../src/snapshot.js';
-import { snapshotReport, diffReport } from '../src/report.js';
+import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
 import { timeout } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
 
@@ -8,12 +8,15 @@ const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+
 
 Usage:
   contract-watch snapshot --address ADDRESS --chain-id ID --out FILE [options]
-  contract-watch diff BEFORE.json AFTER.json
+  contract-watch diff [--json] BEFORE.json AFTER.json
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
   --block BLOCK       latest (default), safe, finalized, decimal or hex number
   --timeout-ms MS     Total timeout per request, 100–60000 (default 10000)
+
+Diff options:
+  --json             Version 1 JSON report on stdout; errors remain on stderr
 
 All state reads use one block hash and require EIP-1898 support.
 Output files are never overwritten. Parent directory must already exist.
@@ -35,6 +38,22 @@ function parseSnapshot(args) {
   return options;
 }
 
+function parseDiff(args) {
+  let json = false;
+  const files = [];
+  for (const value of args) {
+    if (value === '--json') {
+      if (json) fail('USAGE');
+      json = true;
+    } else {
+      if (value.startsWith('--')) fail('USAGE');
+      files.push(value);
+    }
+  }
+  if (files.length !== 2) fail('USAGE');
+  return { json, files };
+}
+
 async function main(args) {
   if (args.length === 0 || (args.length === 1 && ['--help', '-h'].includes(args[0]))) {
     process.stdout.write(HELP); return;
@@ -53,10 +72,12 @@ async function main(args) {
     process.stdout.write(`${snapshotReport(snapshot)}\nSnapshot saved.\n`);
     return;
   }
-  if (args[0] === 'diff' && args.length === 3) {
-    const before = await readSnapshot(args[1]);
-    const after = await readSnapshot(args[2]);
-    process.stdout.write(`${diffReport(before, after)}\n`);
+  if (args[0] === 'diff') {
+    const { json, files } = parseDiff(args.slice(1));
+    const before = await readSnapshot(files[0]);
+    const after = await readSnapshot(files[1]);
+    const report = json ? JSON.stringify(diffDocument(before, after), null, 2) : diffReport(before, after);
+    process.stdout.write(`${report}\n`);
     return;
   }
   fail('USAGE');

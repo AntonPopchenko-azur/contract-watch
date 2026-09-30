@@ -85,6 +85,98 @@ different hashes receive a possible-reorg notice. Equal hashes with different
 content or heights receive an inconsistent-data notice. Neither notice proves
 an upgrade or provides a safety judgment.
 
+## JSON diff contract, version 1
+
+`contract-watch diff [--json] BEFORE.json AFTER.json` reads only local files.
+On success, `--json` writes one UTF-8 JSON object, indented by two spaces and
+terminated by a newline, to stdout. Stderr is empty. It has no text preamble,
+timestamps, filenames/paths, endpoint, remote errors, or raw bytecode. The flag
+may also follow or appear between the filenames; repeated/unknown options are
+usage errors. Use `./` for filenames starting with `--`.
+
+This output schema is independent of the input snapshot schema and package
+version. Consumers must check `kind` and `schemaVersion` before processing. All
+fields below are always present in version 1. Existing field types, meanings and
+enum values are stable; incompatible changes require a new schema version.
+Consumers may ignore future extra object fields. Object key order is not a
+parsing contract; the order of `changes` is fixed as documented below.
+
+| Field | Type and meaning |
+| --- | --- |
+| `kind` | Literal string `contract-watch-diff` |
+| `schemaVersion` | JSON number `1` |
+| `chainId` | Canonical positive decimal string shared by both inputs |
+| `address` | Shared lowercase 20-byte target address |
+| `source` | Shared `rpc` or `synthetic` label; not proof of authenticity |
+| `blocks.before`, `blocks.after` | Objects with `number` (canonical lowercase hex quantity string) and `hash` (lowercase 32-byte hex data) |
+| `changed` | Boolean: true if and only if `changes` is nonempty |
+| `changes` | Array of changed fields only, ordered `code`, `implementation`, `admin`, `beacon` |
+| `notices` | Array of the fixed codes below; empty when neither condition applies |
+
+Chain IDs and block numbers are strings, even for small values. No rounding to
+JSON numbers occurs. Each change has `field`, `before`, and `after`:
+
+- For `field: "code"`, both values are objects with `bytes` (nonnegative integer,
+  at most 131072) and `sha256` (64 lowercase hex digits, without `0x`, over the
+  decoded bytes). Differences are determined from full bytecode, not lengths or
+  hashes. SHA-256 here is a reporting fingerprint, not an Ethereum code hash.
+- For `implementation`, `admin`, or `beacon`, both values have `raw` (the complete
+  lowercase 32-byte word), `status`, and `address`. Status is `empty` for a zero
+  word, `address` for a nonzero word with zero high 12 bytes, or `noncanonical`
+  otherwise. `address` is the lowercase 20-byte address only for status `address`;
+  it is JSON `null` for `empty` and `noncanonical`. Raw anomalous data is preserved.
+
+| Notice code | Condition and interpretation |
+| --- | --- |
+| `SAME_HEIGHT_DIFFERENT_HASH` | Same block number, different hashes: possible reorg, not evidence of an upgrade |
+| `INCONSISTENT_BLOCK_DATA` | Same hash but different block numbers or compared state: check provider or file integrity |
+
+The conditions are mutually exclusive in this version. A notice does not change
+`changed` or the exit code. For example, unchanged state on same-height forked
+blocks gives `changed: false`, `changes: []`, and
+`notices: ["SAME_HEIGHT_DIFFERENT_HASH"]`. Absence of notices or changes is not a
+safety rating and does not establish that no intermediate upgrade occurred.
+
+Example of a successful unchanged comparison:
+
+```json
+{
+  "kind": "contract-watch-diff",
+  "schemaVersion": 1,
+  "chainId": "1",
+  "address": "0x1111111111111111111111111111111111111111",
+  "source": "synthetic",
+  "blocks": {
+    "before": {
+      "number": "0x64",
+      "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "after": {
+      "number": "0x65",
+      "hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "changed": false,
+  "changes": [],
+  "notices": []
+}
+```
+
+Contract fixtures cover [changed](../test/fixtures/json-diff/changed.json),
+[unchanged](../test/fixtures/json-diff/unchanged.json),
+[forked](../test/fixtures/json-diff/forked.json), and
+[incomparable](../test/fixtures/json-diff/incomparable.json) inputs. They also
+preserve golden human output from the published baseline. These fixtures are
+synthetic test cases, not additional input snapshot or output document formats.
+
+Failure behavior is unchanged: incompatible chain/address/source gives
+`INCOMPARABLE`, decreasing height gives `ORDER`, invalid snapshot content gives
+`SNAPSHOT`, and unreadable files give `FILE_READ`. They exit **1**, leave stdout
+empty, and print one fixed safe text error to stderr. There is no JSON error
+envelope or partial result; input validation happens before output. Success,
+including changes and notices, exits **0**. No new exit-code policy is introduced.
+Snapshot version 1 and the default human report remain compatible.
+
 ## Error categories
 
 | Codes | Meaning / action |

@@ -44,7 +44,8 @@ Do not infer universal proxy support or contract safety from these checks.
 The [active workflow](../.github/workflows/ci.yml) runs on `main` pushes and pull
 requests, with separate Node.js 22 and 24 jobs and a five-minute limit per job.
 Each job runs the dependency-free offline install, `npm run check` (syntax plus
-62 tests), and `npm run demo`. Matrix failure does not cancel the other job.
+the full offline test suite), and `npm run demo`. Matrix failure does not cancel
+the other job.
 No chain access or RPC secrets are needed. Permissions are `contents: read`,
 checkout credential persistence is disabled, and package-manager caching is off.
 
@@ -89,5 +90,5 @@ Subsequent coordinator dispatches may make useful tested commits and push to the
 confirmed origin with this identity. Access failures are reported instead of
 changing credentials or expanding permissions. Keep npm publication disabled.
 
-The [roadmap](ROADMAP.md) covers the five baseline areas plus publication and CI;
-items 08–45 remain planned. No independent scheduler was installed.
+The [roadmap](ROADMAP.md) covers subsequent development separately from this
+tagged baseline. No independent scheduler was installed.
