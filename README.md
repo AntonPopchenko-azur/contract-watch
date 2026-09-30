@@ -135,11 +135,17 @@ and loopback-only fake HTTP servers. It never contacts a real chain and does not
 need credentials. Environments that block listening on `127.0.0.1` must grant
 that local test capability. Do not substitute production RPC calls for tests.
 
-GitHub Actions is only an inactive [example](docs/github-actions-ci.yml.example).
-It needs no RPC secrets and only read access to repository contents. It has not
-been run on GitHub. [Release notes](docs/RELEASE.md) record local verification
-and the limits of this baseline. CI activation is the next development step
-after the initial source publication. This package is not published to npm.
+The active [CI workflow](.github/workflows/ci.yml) checks Node.js 22 and 24 on
+pushes to `main` and pull requests. It runs the offline install, `npm run check`,
+and the synthetic demo with no RPC secrets and only read access to repository
+contents. Actions are pinned to verified official release commits, and checkout
+does not persist credentials. [CI results](https://github.com/AntonPopchenko-azur/contract-watch/actions/workflows/ci.yml)
+show each run and its commit.
+
+The initial source baseline is published. Version `v0.1.0` is an annotated Git
+tag, created only after both CI jobs succeed for its target commit; its annotation
+records the verification run. [Release notes](docs/RELEASE.md) document this
+process and baseline limits. This package is not published to npm.
 
 ## Sources
 

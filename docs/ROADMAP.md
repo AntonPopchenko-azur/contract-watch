@@ -2,9 +2,10 @@
 
 This is a finite plan of 45 useful increments, not a commit quota. Items 01–05
 describe the single locally prepared 0.1.0 baseline on 2026-09-30; they do not
-represent five commits or five published releases. Item 06 is partially prepared
-but incomplete: identity is confirmed, local Git is ready, and the public
-repository exists; the initial push awaits Git authentication. Items 07–45 have not started.
+represent five commits or five published releases. Item 06 is confirmed by the
+published baseline; item 07 activates pinned CI and makes both Node.js jobs the
+release gate. The annotated `v0.1.0` tag records the successful verification run.
+Items 08–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -12,7 +13,7 @@ item includes relevant tests and documentation. Keep changes coherent, preserve
 the previous format unless a migration is supplied, and record actual work dates.
 There is no worker-owned scheduler or automatic endless backlog.
 
-## Completed local baseline
+## Completed baseline and release setup
 
 - [x] **01 — Explicit CLI and input validation.** Node.js 22+, no dependencies,
   exact chain ID arithmetic, address syntax, bounded options and useful help.
@@ -23,18 +24,20 @@ There is no worker-owned scheduler or automatic endless backlog.
 - [x] **04 — Adversarial offline verification.** Loopback fake RPC, HTTP/body
   timeouts and limits, protocol errors, redaction, file races and CLI integration.
 - [x] **05 — Local release materials.** Synthetic demo, README, protocol contract,
-  MIT, lockfile, worker guidance, roadmap and inactive CI example.
+  MIT, lockfile, worker guidance, roadmap and the original CI example.
+- [x] **06 — Confirm ownership and publish baseline.** Account
+  `AntonPopchenko-azur` and author `AntonPopchenko-azur <popchenkoanton@gmail.com>`
+  are confirmed. Baseline `e52c75a85d36b7331578337ed9ed21a06134f84c` is published on
+  `main` in `AntonPopchenko-azur/contract-watch`; authenticated account access was
+  verified by the coordinator. No identity borrowing or token expansion.
+- [x] **07 — Activate reproducible CI.** Promote the example to the active
+  workflow with verified official checkout/setup-node SHA pins, independent
+  Node.js 22/24 jobs, read-only permissions, offline tests and demo. Require both
+  jobs to succeed for the target commit before publishing `v0.1.0`, and record
+  the run URL in its annotation; see [release verification](RELEASE.md).
 
 ## Planned increments
 
-- [ ] **06 — Confirm ownership and publish baseline.** Account
-  `AntonPopchenko-azur` and author `AntonPopchenko-azur <popchenkoanton@gmail.com>`
-  are confirmed. Local `main` and project-local identity are prepared. The public
-  repository is `AntonPopchenko-azur/contract-watch`; the initial baseline push
-  awaits Git authentication. Keep this item incomplete
-  until publication is verified. No identity borrowing or token expansion.
-- [ ] **07 — Activate reproducible CI.** Pin reviewed action revisions, enable the
-  example for the confirmed repository, and verify Node 22/24 results.
 - [ ] **08 — Machine-readable diff.** Add stable JSON output with fixtures for
   changed, unchanged, forked and incomparable inputs; preserve human output.
 - [ ] **09 — Automation exit policy.** Add opt-in distinct status for changes and

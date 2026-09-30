@@ -1,25 +1,25 @@
-# Inactive example. Review/pin action revisions and copy to .github/workflows/ci.yml
-# only when the coordinator dispatches roadmap item 07 after publication.
-# Account AntonPopchenko-azur is confirmed; access/publication are still pending.
-# References: https://github.com/actions/checkout and https://github.com/actions/setup-node
+# Official release commits verified on 2026-09-30; see docs/RELEASE.md.
 name: CI
-on:
+"on":
   push:
+    branches: [main]
   pull_request:
 permissions:
   contents: read
 jobs:
   test:
+    name: Node.js ${{ matrix.node }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     strategy:
+      fail-fast: false
       matrix:
         node: [22, 24]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
           package-manager-cache: false

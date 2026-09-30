@@ -5,7 +5,7 @@ AGENTS.md also applies. Work only in this project directory; set it explicitly
 for package commands, tests, and any future Git commands. Preserve user changes.
 Do not edit parent coordination state or sibling projects.
 
-## Confirmed identity and publication handoff
+## Confirmed identity and published repository
 
 The user confirmed this project's identity on 2026-09-30:
 
@@ -16,16 +16,21 @@ The user confirmed this project's identity on 2026-09-30:
 - Repository-local `credential.https://github.com.useHttpPath`: `true`
 
 The public repository is `https://github.com/AntonPopchenko-azur/contract-watch`.
-The coordinator is completing the initial commit and Git authentication.
-Until publication is verified and the coordinator dispatches development work,
-do not create commits or tags, push, or start the next item. After that handoff,
-each authorized dispatch may commit and push one coherent roadmap increment
-to this repository using the identity above. Do not create or change credentials.
-A username hint does not establish authenticated access.
+The coordinator verified baseline commit
+`e52c75a85d36b7331578337ed9ed21a06134f84c` on local and GitHub `main` and confirmed
+authenticated access as `AntonPopchenko-azur`. Publication preparation is complete.
+Each authorized coordinator dispatch may implement, test, commit, and push one
+coherent roadmap increment to this repository using the identity above. Check
+the working tree and origin before writing; preserve unrelated changes.
+Use the existing repository-scoped authentication. Do not create or change
+credentials or permissions; report access failures to the coordinator.
 Do not borrow Tojen-dev or another project's identity. Do not change global Git
 identity or credential settings, and do not remove existing Keychain entries.
-Keep the package private; npm publication is not authorized. Roadmap item 06
-remains incomplete and item 07 has not started.
+Keep the package private; npm publication is not authorized. CI now runs from
+`.github/workflows/ci.yml` on Node.js 22 and 24. Release tags require an explicit
+release dispatch and successful CI for the exact target commit. The initial
+`v0.1.0` dispatch authorizes an annotated tag after both jobs succeed, without a
+GitHub release page. Never replace an existing published tag.
 
 ## Development contract
 
@@ -62,5 +67,5 @@ manufacture contribution activity, backdate work, fake reviews/stars, rewrite
 published history, force-push, expand token access, or message third parties.
 
 Successful routine scheduled work is quiet. Report failures that need attention,
-pending access/publication setup, or completion of the roadmap. GitHub Actions
-stays an inactive example until the coordinator dispatches item 07.
+access or CI failures, or completion of the roadmap. Do not start the next item
+until the coordinator dispatches it.
