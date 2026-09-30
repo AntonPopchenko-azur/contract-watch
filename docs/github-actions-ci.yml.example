@@ -1,0 +1,28 @@
+# Inactive example. Review/pin action revisions and copy to .github/workflows/ci.yml
+# only when the coordinator dispatches roadmap item 07 after publication.
+# Account AntonPopchenko-azur is confirmed; access/publication are still pending.
+# References: https://github.com/actions/checkout and https://github.com/actions/setup-node
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts --offline --no-audit --no-fund
+      - run: npm run check
+      - run: npm run demo

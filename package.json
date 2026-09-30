@@ -1,0 +1,15 @@
+{
+  "name": "contract-watch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only EIP-1967 slot snapshots and local diffs for EVM contracts",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "bin": { "contract-watch": "bin/contract-watch.js" },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check": "node --check bin/contract-watch.js && node --test test/*.test.js",
+    "demo": "node bin/contract-watch.js diff examples/before.json examples/after.json"
+  }
+}

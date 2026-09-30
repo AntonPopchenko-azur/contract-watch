@@ -1,0 +1,7 @@
+node_modules/
+coverage/
+snapshots/
+.env
+.env.*
+*.tmp
+.DS_Store
