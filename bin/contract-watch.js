@@ -8,7 +8,7 @@ const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+
 
 Usage:
   contract-watch snapshot --address ADDRESS --chain-id ID --out FILE [options]
-  contract-watch diff [--json] BEFORE.json AFTER.json
+  contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -17,11 +17,12 @@ Snapshot options:
 
 Diff options:
   --json             Version 1 JSON report on stdout; errors remain on stderr
+  --exit-code        Exit 2 for state changes, 0 without changes, 1 for errors
 
 All state reads use one block hash and require EIP-1898 support.
 Output files are never overwritten. Parent directory must already exist.
 Address validation checks 20-byte hex syntax, not EIP-55 checksum.
-Diff is offline. Exit status: 0 success (including changes), 1 error.
+Diff is offline. Default exit status: 0 success (including changes), 1 error.
 This tool does not assess safety, resolve beacons, or detect every proxy type.
 `;
 
@@ -40,18 +41,22 @@ function parseSnapshot(args) {
 
 function parseDiff(args) {
   let json = false;
+  let exitCode = false;
   const files = [];
   for (const value of args) {
     if (value === '--json') {
       if (json) fail('USAGE');
       json = true;
+    } else if (value === '--exit-code') {
+      if (exitCode) fail('USAGE');
+      exitCode = true;
     } else {
       if (value.startsWith('--')) fail('USAGE');
       files.push(value);
     }
   }
   if (files.length !== 2) fail('USAGE');
-  return { json, files };
+  return { json, exitCode, files };
 }
 
 async function main(args) {
@@ -73,11 +78,13 @@ async function main(args) {
     return;
   }
   if (args[0] === 'diff') {
-    const { json, files } = parseDiff(args.slice(1));
+    const { json, exitCode, files } = parseDiff(args.slice(1));
     const before = await readSnapshot(files[0]);
     const after = await readSnapshot(files[1]);
-    const report = json ? JSON.stringify(diffDocument(before, after), null, 2) : diffReport(before, after);
+    const document = json || exitCode ? diffDocument(before, after) : null;
+    const report = json ? JSON.stringify(document, null, 2) : diffReport(before, after);
     process.stdout.write(`${report}\n`);
+    if (exitCode && document.changed) process.exitCode = 2;
     return;
   }
   fail('USAGE');

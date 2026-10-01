@@ -71,12 +71,53 @@ remote errors. The normal text report is unchanged when `--json` is omitted.
 The flag may appear before, between, or after the two filenames; duplicate or
 unknown flags are rejected. Prefix a filename starting with `--` with `./`.
 
-Both changed and unchanged comparisons still exit **0**, including a comparison
+By default, changed and unchanged comparisons exit **0**, including a comparison
 with a fork/inconsistency notice. On incomparable snapshots, invalid files, or
 other errors, stdout is **empty**, stderr contains the existing safe text error,
 and the exit status is **1**. No partial report or JSON error document is emitted;
 check the exit status before parsing stdout. JSON diff is offline and ignores
 `CONTRACT_WATCH_RPC_URL`. See the [JSON format contract](docs/PROTOCOL.md#json-diff-contract-version-1).
+
+For automation, `diff --exit-code` distinguishes observed state changes from an
+unchanged comparison. It works with text output and with `--json`; neither
+report changes. The status is based only on `changed` (code or slot changes).
+Notices without state changes, such as different hashes at the same height,
+do not produce status 2. Status 2 indicates a completed comparison, not an error
+or proof of an upgrade.
+
+| Diff result | Default | With `--exit-code` |
+| --- | --- | --- |
+| No code/slot changes, with or without notices | `0` | `0` |
+| Code/slot changes, with or without notices | `0` | `2` |
+| Argument, read, validation, ordering, or compatibility error | `1` | `1` |
+
+`--exit-code` is a valueless flag accepted only by `diff`, at most once. Like
+`--json`, it can appear before, between, or after the two filenames. Snapshot
+options such as `--rpc` cannot be used with `diff`; `snapshot --exit-code`,
+`--exit-code=2`, and repeated flags are usage errors. Snapshot exit codes remain
+0 for success and 1 for errors.
+
+This shell example captures the status immediately in an `if`/`else`, so it works
+under `set -e`. The complete report goes to `diff.json`; parse it only after a
+status of 0 or 2. Avoid `if ! command; then diff_status=$?`, which captures the
+negated status, and avoid a pipeline, whose status may belong to another command.
+
+```sh
+set -e
+if node bin/contract-watch.js diff --json --exit-code \
+  snapshots/first.json snapshots/second.json > diff.json; then
+  diff_status=0
+else
+  diff_status=$?
+fi
+
+case "$diff_status" in
+  0) printf '%s\n' 'No code or slot changes; report saved to diff.json.' >&2 ;;
+  2) printf '%s\n' 'Code or slot changes detected; inspect diff.json.' >&2 ;;
+  1) printf '%s\n' 'Comparison failed; do not parse diff.json.' >&2; exit 1 ;;
+  *) exit "$diff_status" ;;
+esac
+```
 
 `--rpc URL` overrides `CONTRACT_WATCH_RPC_URL`. Prefer the environment variable for
 key-bearing URLs so the URL is not in CLI arguments; environment variables still
@@ -100,8 +141,8 @@ names, `pending`, duplicate flags, and unknown options are rejected. The zero
 address is a valid target and will usually have no code.
 
 Diff takes two files, with the earlier block first. Both must have the same
-address, chain ID, and source kind. Exit status is **0 for success, including a
-diff with changes**, and **1 for input, RPC, or file errors**. Errors use stable
+address, chain ID, and source kind. Without `--exit-code`, status is **0 for
+success, including a diff with changes**. Errors use status **1** and stable
 codes and fixed messages; URLs, paths, remote error text, and stacks are omitted.
 
 ## What a snapshot means

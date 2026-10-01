@@ -6,7 +6,8 @@ represent five commits or five published releases. Item 06 is confirmed by the
 published baseline; item 07 activates pinned CI and makes both Node.js jobs the
 release gate. The annotated `v0.1.0` tag records the successful verification run.
 Item 08 adds the versioned offline JSON diff on 2026-09-30.
-Items 09–45 have not started.
+Item 09 adds an opt-in change exit status on 2026-10-01.
+Items 10–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -41,11 +42,14 @@ There is no worker-owned scheduler or automatic endless backlog.
   unchanged, forked and incomparable fixtures verify JSON output, safe failure,
   exact large integers and unchanged human output. Success/error exit codes stay
   0/1; snapshot version 1 is unchanged. Completed 2026-09-30.
+- [x] **09 — Automation exit policy.** Add `diff --exit-code`: 2 for state
+  changes, 0 without changes, and 1 for errors in both text and JSON modes.
+  Default success remains 0; notices alone do not trigger 2. CLI tests cover
+  compatibility, errors and flags, including the README shell example under
+  `set -e`. Reports and schema versions are unchanged. Completed 2026-10-01.
 
 ## Planned increments
 
-- [ ] **09 — Automation exit policy.** Add opt-in distinct status for changes and
-  document shell usage without changing the default success status.
 - [ ] **10 — Inspect existing snapshots.** Add an offline report command with
   corrupt-file and format-version tests.
 - [ ] **11 — Strict checksum option.** Add verified EIP-55 support with official

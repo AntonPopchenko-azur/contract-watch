@@ -87,7 +87,7 @@ an upgrade or provides a safety judgment.
 
 ## JSON diff contract, version 1
 
-`contract-watch diff [--json] BEFORE.json AFTER.json` reads only local files.
+`contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json` reads only local files.
 On success, `--json` writes one UTF-8 JSON object, indented by two spaces and
 terminated by a newline, to stdout. Stderr is empty. It has no text preamble,
 timestamps, filenames/paths, endpoint, remote errors, or raw bytecode. The flag
@@ -173,9 +173,16 @@ Failure behavior is unchanged: incompatible chain/address/source gives
 `INCOMPARABLE`, decreasing height gives `ORDER`, invalid snapshot content gives
 `SNAPSHOT`, and unreadable files give `FILE_READ`. They exit **1**, leave stdout
 empty, and print one fixed safe text error to stderr. There is no JSON error
-envelope or partial result; input validation happens before output. Success,
-including changes and notices, exits **0**. No new exit-code policy is introduced.
-Snapshot version 1 and the default human report remain compatible.
+envelope or partial result; input validation happens before output. By default,
+success, including changes and notices, exits **0**. With `--exit-code`, a
+successful comparison exits **2** exactly when `changed` is true, otherwise **0**.
+Notices alone never trigger 2. Errors still exit **1**, even with this flag.
+
+`--exit-code` is accepted once, only by `diff`, with no value, and can be combined
+with `--json` in any position among the filenames. Duplicate or incompatible
+flags give `USAGE` before reading files. Both text and JSON reports are identical
+with and without this option. JSON/snapshot schema versions remain 1. See the
+[README shell example](../README.md) for handling status 2 safely under `set -e`.
 
 ## Error categories
 

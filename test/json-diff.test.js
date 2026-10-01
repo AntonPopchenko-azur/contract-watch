@@ -74,7 +74,7 @@ test('JSON flags work before, between or after filenames; duplicate and unsuppor
   for (const args of [
     ['diff', '--json', ...paths, '--json'], ['diff', '--json', paths[0]],
     ['diff', '--json', ...paths, 'PRIVATE_INPUT_MARKER'],
-    ['diff', ...paths, '--json=true'], ['diff', '--json', ...paths, '--exit-code'],
+    ['diff', ...paths, '--json=true'], ['diff', '--json', ...paths, '--unknown-flag'],
     ['snapshot', '--json']
   ]) {
     const result = await cli(args);
