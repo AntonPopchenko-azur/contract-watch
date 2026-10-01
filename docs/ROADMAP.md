@@ -7,7 +7,8 @@ published baseline; item 07 activates pinned CI and makes both Node.js jobs the
 release gate. The annotated `v0.1.0` tag records the successful verification run.
 Item 08 adds the versioned offline JSON diff on 2026-09-30.
 Item 09 adds an opt-in change exit status on 2026-10-01.
-Items 10–45 have not started.
+Item 10 adds offline inspection of saved snapshots on 2026-10-01.
+Items 11–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -47,11 +48,14 @@ There is no worker-owned scheduler or automatic endless backlog.
   Default success remains 0; notices alone do not trigger 2. CLI tests cover
   compatibility, errors and flags, including the README shell example under
   `set -e`. Reports and schema versions are unchanged. Completed 2026-10-01.
+- [x] **10 — Inspect existing snapshots.** Add `inspect FILE` using the strict
+  bounded v1 reader and existing text report. CLI/fixture tests cover source
+  labels, exact integers, empty/noncanonical state, corrupt and unsupported
+  files, size limits, unusual files, rejected flags, no RPC and unchanged input.
+  Existing commands and schemas are preserved. Completed 2026-10-01.
 
 ## Planned increments
 
-- [ ] **10 — Inspect existing snapshots.** Add an offline report command with
-  corrupt-file and format-version tests.
 - [ ] **11 — Strict checksum option.** Add verified EIP-55 support with official
   vectors and clear opt-in behavior, keeping dependency decisions explicit.
 - [ ] **12 — Block hash input.** Accept an explicit block hash, resolve metadata,

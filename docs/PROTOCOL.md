@@ -66,6 +66,29 @@ decoded slot addresses and code fingerprints are computed when reporting, not
 trusted from a file. No endpoint, provider error, key, arbitrary comment, or
 filename is included in the format. `capturedAt` is not the block timestamp.
 
+## Offline inspection
+
+`contract-watch inspect FILE` passes one file through the existing bounded
+snapshot reader and strict version 1 validator, then prints the same text report
+used by capture (without the save confirmation). It makes no RPC calls, ignores
+`CONTRACT_WATCH_RPC_URL`, and does not write, migrate, or modify snapshot data.
+Reading can update filesystem access metadata according to the operating system.
+
+Only regular files up to 512 KiB are accepted, including a symlink resolving to a
+regular file. Directories, FIFOs, missing paths and broken links give `FILE_READ`;
+corrupt JSON, unsupported versions, unknown/missing fields and invalid data give
+`SNAPSHOT`. Existing code/word/quantity size and canonical-format checks apply.
+No flags are accepted. Missing/extra/empty filenames or flag-like arguments give
+`USAGE`; prefix filenames beginning with `-` with `./`.
+
+Success is exit 0 with a complete report on stdout and no stderr. Failures are
+exit 1 with empty stdout and a fixed safe error on stderr: no path, raw input,
+endpoint or stack trace. The report identifies source, chain, address and pinned
+block, including exact large integers. Empty slots/code and noncanonical words
+retain their existing interpretations. A saved source label is not proof of
+authenticity, and slot values do not prove proxy behavior, upgrades or safety.
+Snapshot v1, JSON diff v1 and the existing diff exit policy are unchanged.
+
 ## Persistence and comparison
 
 Saving writes a new, private temporary file in the destination directory, syncs

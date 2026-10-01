@@ -8,6 +8,7 @@ const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+
 
 Usage:
   contract-watch snapshot --address ADDRESS --chain-id ID --out FILE [options]
+  contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
 
 Snapshot options:
@@ -23,6 +24,7 @@ All state reads use one block hash and require EIP-1898 support.
 Output files are never overwritten. Parent directory must already exist.
 Address validation checks 20-byte hex syntax, not EIP-55 checksum.
 Diff is offline. Default exit status: 0 success (including changes), 1 error.
+Inspect is offline and accepts one snapshot v1 file, no options; exit 0/1.
 This tool does not assess safety, resolve beacons, or detect every proxy type.
 `;
 
@@ -85,6 +87,12 @@ async function main(args) {
     const report = json ? JSON.stringify(document, null, 2) : diffReport(before, after);
     process.stdout.write(`${report}\n`);
     if (exitCode && document.changed) process.exitCode = 2;
+    return;
+  }
+  if (args[0] === 'inspect') {
+    if (args.length !== 2 || !args[1] || args[1].startsWith('-')) fail('USAGE');
+    const snapshot = await readSnapshot(args[1]);
+    process.stdout.write(`${snapshotReport(snapshot)}\n`);
     return;
   }
   fail('USAGE');

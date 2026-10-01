@@ -35,6 +35,33 @@ These addresses, block hashes and code are invented demonstration data, not
 observations from Ethereum. `capturedAt` in the examples records their generation
 time, not a claim that those blocks were observed then.
 
+## Inspect a saved snapshot
+
+Display one existing snapshot without connecting to a chain:
+
+```sh
+node bin/contract-watch.js inspect examples/before.json
+```
+
+`inspect FILE` accepts exactly one snapshot v1 file and no options. It uses the
+same strict reader and text formatter as capture, displaying source, chain ID,
+address, block number/hash, code size/fingerprint and the three EIP-1967 slots.
+Synthetic inputs are marked `synthetic (demonstration only)`. Large chain IDs
+and block numbers are displayed exactly. Empty slots appear as `empty`, nonzero
+high address bytes as `noncanonical word`, and empty code is explicitly noted.
+
+This describes the saved state; it does not refresh data, prove proxy behavior
+or an upgrade, resolve beacons, or assess safety. `source: rpc` is a file label,
+not an independent verification of its contents. The command ignores
+`CONTRACT_WATCH_RPC_URL` and does not write or modify the input file.
+
+Success exits **0**, with the report on stdout and empty stderr. Invalid JSON,
+unsupported versions, unknown/missing fields, unreadable/non-regular files, and
+files over 512 KiB fail with exit **1**, empty stdout and a fixed safe stderr
+message. No migration or permissive parsing is performed. Snapshot/diff options
+such as `--rpc`, `--json` and `--exit-code` are rejected; for a filename starting
+with `-`, use a path such as `./-snapshot.json`.
+
 ## Capture a snapshot
 
 Supply the exact target address, expected chain ID, and your chosen HTTP(S) RPC.
