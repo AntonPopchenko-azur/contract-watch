@@ -54,19 +54,52 @@ implementation, and Python is not a project dependency. Local fake-RPC CLI
 tests verify pre-network failure, no files after rejected input, lowercase
 requests/persistence, default compatibility and offline inspect/diff behavior.
 
+## Block selection
+
+`snapshot --block-hash HASH` selects a block explicitly by its 32-byte hash.
+The input must be `0x` followed by exactly 64 ASCII hex digits; uppercase/mixed
+hex letters are accepted and normalized to lowercase. Syntax failures give
+`BLOCK_HASH` before RPC construction or file creation. The prefix remains `0x`.
+The flag takes exactly one value and cannot be repeated or combined with any
+explicit `--block`, even `latest`. Conflicts, missing values, equals-style
+arguments and use on `inspect`/`diff` give `USAGE`, with no RPC/file side effects.
+
+Without a hash, the existing `--block` behavior is preserved: latest by default,
+safe/finalized tags, or decimal/hex numbers up to 256 bits. A 64-digit hex value
+passed via `--block` is still a number. No selector is inferred from string
+length. Hash selection composes with the existing target checksum and RPC options.
+
+The hash lookup follows
+[eth_getBlockByHash](https://ethereum.org/developers/docs/apis/json-rpc/#eth_getblockbyhash)
+with parameters `[normalizedHash, false]`. The boolean requests transaction
+hashes instead of full objects; the response can still contain other block data.
+Only the validated block number and hash are retained. All block lookup
+responses remain subject to the existing 1 MiB cap. Snapshot v1 stores the same
+lowercase `block.number` and `block.hash`; no schema or offline report changes
+are needed.
+
 ## RPC sequence
 
 1. Validate CLI input before opening a connection; normalize address and expected
    chain ID. Chain IDs and block numbers use `BigInt`, not floating point.
 2. `eth_chainId` must match the requested positive chain ID.
-3. `eth_getBlockByNumber` resolves a tag or number to a mined block's number and
-   32-byte hash. A null block is an error. For a numeric request the returned
-   number must match.
+3. `eth_getBlockByNumber` resolves a tag/number, or `eth_getBlockByHash` resolves
+   an explicit hash, always with the second parameter `false`. A null block
+   gives `BLOCK_UNAVAILABLE`. The returned number must be a valid minimal hex
+   quantity (at most 256 bits) and the hash must be 32 bytes. Malformed or
+   pending-shaped data gives `RPC_DATA`. For a numeric request the number must
+   match; for a hash request the normalized returned hash must match.
+   In hash mode only, an additional `eth_getBlockByNumber` with the returned
+   number and `false` checks canonicality **before state reads**. A missing
+   canonical header gives `BLOCK_UNAVAILABLE`, malformed data/wrong number gives
+   `RPC_DATA`, and a different valid hash gives `BLOCK_NOT_CANONICAL`.
 4. `eth_getCode` reads target code using the resolved hash selector.
 5. Three `eth_getStorageAt` calls read implementation, admin, and beacon using
    that identical selector: `{ "blockHash": "0x…", "requireCanonical": true }`.
 6. `eth_getBlockByNumber` at the resolved number verifies the same hash is still
-   canonical, and `eth_chainId` is checked again.
+   canonical in both selection modes, and `eth_chainId` is checked again.
+   A different number/hash on this final check gives `BLOCK_CHANGED`; missing
+   or malformed metadata still fails. A changed chain gives `CHAIN_MISMATCH`.
 7. Only after all checks succeed, save a complete snapshot.
 
 The hash selector follows [EIP-1898](https://eips.ethereum.org/EIPS/eip-1898).
@@ -74,6 +107,15 @@ It makes the state reads refer to the same block even across a head change.
 The final recheck detects a reorg at that point, not permanent finality. An
 unsupported selector, unavailable historical state, or provider error aborts
 capture. No fallback, retry, batch, or write method is used.
+
+A successful tag/number capture makes eight sequential requests; hash selection
+makes nine. At the configured per-request timeout, their RPC time budgets are
+at most eight or nine times that timeout. The only newly allowed RPC method is
+the read-only `eth_getBlockByHash`. Provider errors (including unsupported hash
+lookups, pruned state, noncanonical state or rejected EIP-1898 selectors) remain
+fixed `RPC_REMOTE` errors without raw provider content. Any failure aborts
+without saving a snapshot. Checking canonicality twice does not establish
+permanent finality or independently authenticate a provider's block data.
 
 The [EIP-1967](https://eips.ethereum.org/EIPS/eip-1967) positions are:
 

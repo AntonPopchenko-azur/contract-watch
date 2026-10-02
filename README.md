@@ -160,8 +160,35 @@ credentials and fragments are rejected. The CLI never prints or stores the URL.
 | `--out FILE` | Required new snapshot path in an existing directory |
 | `--rpc URL` | Explicit HTTP(S) RPC, or use `CONTRACT_WATCH_RPC_URL` |
 | `--block BLOCK` | `latest` by default; `safe`, `finalized`, decimal or hex block number also accepted |
+| `--block-hash HASH` | Exact `0x` plus 64 hex digits; canonical block only; conflicts with `--block` |
 | `--timeout-ms MS` | 100–60000 ms per whole request; default 10000 |
 | `--strict-checksum` | Opt-in exact EIP-55 casing for the target address; no value |
+
+To select a particular block by hash, replace `--block finalized` in the capture
+example with `--block-hash HASH`, using the intended block's full hash. The
+`0x` prefix must be lowercase; hex letters may use any case and are normalized
+to lowercase. Validation happens before RPC or file creation. The option takes
+one value and may appear anywhere among snapshot options, at most once.
+Combining it with any explicit `--block`, including `--block latest`, is a usage
+error. `--block-hash=HASH`, missing values and duplicates are also usage errors;
+invalid hash syntax gives `BLOCK_HASH`. Errors exit 1 with empty stdout and fixed
+safe stderr messages. The option is not accepted by `inspect` or `diff`.
+
+Hash lookup requests block metadata without full transaction objects and verifies
+that the returned hash matches the requested one. Before reading contract state,
+the CLI checks that the block at the returned number has that same hash. Missing
+blocks, malformed/mismatched metadata and noncanonical hashes abort capture.
+Code/storage reads still require EIP-1898 with `requireCanonical: true`, followed
+by the existing canonical-block and chain rechecks. There is no fallback to
+another block if the hash, canonical state or historical data is unavailable.
+An explicit hash does not establish finality or independently verify RPC data.
+
+Without either selector, capture still uses `latest`. `--block` retains its tag
+and integer semantics: even a 64-digit hexadecimal value is a **block number**,
+never inferred to be a hash. Hash selection works with `--strict-checksum`,
+`--rpc`/the RPC environment variable and the request timeout. Snapshot v1 and
+JSON diff v1 remain unchanged: the saved block has lowercase `number` and `hash`,
+with no extra selection fields. See the [block selection contract](docs/PROTOCOL.md#block-selection).
 
 By default, address validation checks length and hex syntax; any letter casing
 is accepted. Add `--strict-checksum` to `snapshot` to require the exact
@@ -223,8 +250,11 @@ atomically on filesystems supporting same-directory hard links and use mode
 
 Limits are 1 MiB per HTTP response, 16 KiB of HTTP headers, 128 KiB of target code,
 and 512 KiB per snapshot input. Redirects and compressed responses are rejected.
-There are eight sequential read requests on a successful capture, no retries,
-and no background loop. A capture can therefore take up to eight request timeouts.
+There are eight sequential read requests for a successful tag/number capture,
+or nine with `--block-hash` (the extra initial canonical check). There are no
+retries or background loop. A capture can therefore take up to eight or nine
+request timeouts respectively. Block lookups request transaction hashes only,
+not full transaction objects; the same 1 MiB response limit applies to them.
 The RPC allowlist contains only chain, block, code, and storage reads; no wallet,
 signing, transaction submission, or `eth_call` is used in this version.
 

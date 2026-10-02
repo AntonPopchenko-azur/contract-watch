@@ -17,6 +17,7 @@ export const CLI = fileURLToPath(new URL('../../bin/contract-watch.js', import.m
 export function protocolResult(request) {
   switch (request.method) {
     case 'eth_chainId': return '0x1';
+    case 'eth_getBlockByHash':
     case 'eth_getBlockByNumber': return { number: '0x64', hash: HASH };
     case 'eth_getCode': return '0x60006000';
     case 'eth_getStorageAt': return request.params[1] === '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc' ? word(IMPLEMENTATION) : EMPTY;

@@ -4,7 +4,9 @@ import { WatchError, fail } from './errors.js';
 import { rpcUrl, timeout } from './validate.js';
 
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
-const READ_METHODS = new Set(['eth_chainId', 'eth_getBlockByNumber', 'eth_getCode', 'eth_getStorageAt']);
+const READ_METHODS = new Set([
+  'eth_chainId', 'eth_getBlockByNumber', 'eth_getBlockByHash', 'eth_getCode', 'eth_getStorageAt'
+]);
 
 export function createRpc(endpoint, timeoutMs = 10000) {
   const url = rpcUrl(endpoint);

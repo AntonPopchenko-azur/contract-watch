@@ -9,7 +9,8 @@ Item 08 adds the versioned offline JSON diff on 2026-09-30.
 Item 09 adds an opt-in change exit status on 2026-10-01.
 Item 10 adds offline inspection of saved snapshots on 2026-10-01.
 Item 11 adds opt-in strict EIP-55 target validation on 2026-10-02.
-Items 12–45 have not started.
+Item 12 adds explicit canonical block-hash selection on 2026-10-02.
+Items 13–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -60,11 +61,15 @@ There is no worker-owned scheduler or automatic endless backlog.
   syntax and CLI flags are tested. Validation precedes RPC/file creation;
   default syntax-only behavior, lowercase v1 persistence and offline commands
   remain compatible. Completed 2026-10-02.
+- [x] **12 — Block hash input.** Add `snapshot --block-hash` with exact hash
+  validation, metadata lookup and canonical checks before/after hash-pinned
+  state reads. Fake-RPC/CLI tests cover exact selectors, large numbers, rejected
+  headers, missing/noncanonical state, reorgs, chain changes, redaction and no
+  file after failure. Existing number/tag semantics, checksum mode and v1
+  formats are preserved. Completed 2026-10-02.
 
 ## Planned increments
 
-- [ ] **12 — Block hash input.** Accept an explicit block hash, resolve metadata,
-  and test missing/noncanonical blocks without weakening consistency.
 - [ ] **13 — Confirmation-depth capture.** Resolve a requested depth safely,
   including short chains and underflow; document finality limits.
 - [ ] **14 — Beacon implementation resolution.** Add a bounded read-only

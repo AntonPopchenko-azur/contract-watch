@@ -37,6 +37,11 @@ export function blockTag(value = 'latest') {
   return `0x${inputInteger(value, 'BLOCK').toString(16)}`;
 }
 
+export function blockHash(value) {
+  if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value)) fail('BLOCK_HASH');
+  return value.toLowerCase();
+}
+
 export function quantity(value) {
   if (typeof value !== 'string' || !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$/.test(value)) fail('RPC_DATA');
   return value.toLowerCase();

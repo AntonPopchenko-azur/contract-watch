@@ -2,7 +2,7 @@ import { open, link, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { address, chainId, blockTag, quantity, data } from './validate.js';
+import { address, chainId, blockTag, blockHash, quantity, data } from './validate.js';
 import { fail } from './errors.js';
 import { createRpc } from './rpc.js';
 
@@ -23,16 +23,26 @@ function blockHeader(value) {
 
 export async function capture({
   rpcUrl, address: inputAddress, chainId: expectedChain,
-  block = 'latest', timeoutMs = 10000, strictChecksum = false
+  block, blockHash: inputHash, timeoutMs = 10000, strictChecksum = false
 }) {
+  if (block !== undefined && inputHash !== undefined) fail('USAGE');
   const target = address(inputAddress, { strictChecksum });
   const expected = chainId(expectedChain);
-  const tag = blockTag(block);
+  const hash = inputHash === undefined ? undefined : blockHash(inputHash);
+  const tag = hash === undefined ? blockTag(block) : undefined;
   const rpc = createRpc(rpcUrl, timeoutMs);
   const actual = BigInt(quantity(await rpc('eth_chainId'))).toString();
   if (actual !== expected) fail('CHAIN_MISMATCH');
-  const pinned = blockHeader(await rpc('eth_getBlockByNumber', [tag, false]));
-  if (tag.startsWith('0x') && pinned.number !== tag) fail('RPC_DATA');
+  const pinned = blockHeader(await rpc(
+    hash === undefined ? 'eth_getBlockByNumber' : 'eth_getBlockByHash', [hash ?? tag, false]
+  ));
+  if (hash !== undefined) {
+    if (pinned.hash !== hash) fail('RPC_DATA');
+    // A by-hash lookup may return a side-chain block. Reject it before state reads.
+    const canonical = blockHeader(await rpc('eth_getBlockByNumber', [pinned.number, false]));
+    if (canonical.number !== pinned.number) fail('RPC_DATA');
+    if (canonical.hash !== pinned.hash) fail('BLOCK_NOT_CANONICAL');
+  } else if (tag.startsWith('0x') && pinned.number !== tag) fail('RPC_DATA');
   const selector = { blockHash: pinned.hash, requireCanonical: true };
   const code = data(await rpc('eth_getCode', [target, selector]));
   const slots = {};
