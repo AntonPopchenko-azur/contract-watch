@@ -1,5 +1,59 @@
 # Protocol and snapshot format, version 1
 
+## Address checksum
+
+`snapshot --strict-checksum` opts into exact
+[EIP-55 address casing](https://eips.ethereum.org/EIPS/eip-55). First validate
+`0x` plus exactly 40 ASCII hexadecimal digits. Hash the 40 lowercase hex
+characters, encoded as ASCII **without `0x`**, using Ethereum Keccak-256. At each
+letter position, uppercase the letter if the corresponding hash nibble is at
+least 8, otherwise lowercase it. The original input must match the entire
+canonical result. No blanket exception is made for all-lowercase or all-uppercase
+input; either can be canonical. The all-zero address passes.
+
+Syntax errors give `ADDRESS`; a well-formed address with wrong casing gives
+`ADDRESS_CHECKSUM`. Both fail before RPC construction or file creation. The CLI
+returns status 1 with empty stdout and fixed safe stderr, without the input or a
+suggested address. Without the flag, the existing syntax-only validation accepts
+any casing. The flag is valueless, allowed once only on `snapshot`; duplicates,
+values and other commands give `USAGE`.
+
+Checksum validation applies only to the input target. After validation it is
+normalized to lowercase for RPC and snapshot v1. Stored addresses, raw slots,
+inspect output, JSON diff v1 and existing exit policies retain their contracts.
+The chain ID is not part of EIP-55 hashing; this option does not add EIP-1191.
+A matching checksum does not establish ownership, chain identity or safety.
+
+### Dependency decision and verification
+
+The project retains Node.js 22+ and no runtime/development dependencies. The
+local `src/keccak.js` implements byte-aligned Keccak-256 with 64-bit BigInt lanes,
+24 Keccak-f[1600] rounds, a 136-byte rate, 512-bit capacity and little-endian lane
+encoding. It uses legacy `0x01` padding and the final `0x80` bit, including a new
+padding block for exact-rate inputs. SHA3-256 uses a different suffix (`0x06`)
+and cannot substitute for this checksum. This avoids dependence on a native
+addon or the host's available OpenSSL hash names. Production use is limited to
+the validated 40-byte public address text; there is no signing or secret input.
+Bytecode reports continue using Node's built-in SHA-256.
+
+The [Keccak specification](https://keccak.team/keccak_specs_summary.html) supplies
+the permutation, rotation offsets and round constants. `test/checksum.test.js`
+contains all eight official EIP-55 vectors, single-letter case mutations and
+independent hash results for empty input, `abc`, and byte sequences of lengths
+1, 40, 135, 136, 137, 200, 272 and 273. For each sequence, byte `i` is `i % 256`.
+These cover lane endianness, both padding edge cases and multiple blocks.
+
+Expected digests were generated independently with the Keccak designers' CC0
+`CompactFIPS202.py` reference using `Keccak(1088, 512, input, 0x01, 32)`. Its
+[pinned source blob](https://api.github.com/repos/XKCP/XKCP/git/blobs/0b9608fc01852ea94182139890beca21b61b677a)
+is stored in the XKCP repository under `Standalone/CompactFIPS202/Python/`.
+The `abc` digest also matches the
+[Go crypto TestKeccak vector](https://go.googlesource.com/crypto/+/c757c9851f77c470645455f548046ae0ce87ef8d/sha3/sha3_test.go).
+Tests use the fixed results offline; they do not download or run another
+implementation, and Python is not a project dependency. Local fake-RPC CLI
+tests verify pre-network failure, no files after rejected input, lowercase
+requests/persistence, default compatibility and offline inspect/diff behavior.
+
 ## RPC sequence
 
 1. Validate CLI input before opening a connection; normalize address and expected

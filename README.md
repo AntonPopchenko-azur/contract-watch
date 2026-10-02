@@ -161,9 +161,43 @@ credentials and fragments are rejected. The CLI never prints or stores the URL.
 | `--rpc URL` | Explicit HTTP(S) RPC, or use `CONTRACT_WATCH_RPC_URL` |
 | `--block BLOCK` | `latest` by default; `safe`, `finalized`, decimal or hex block number also accepted |
 | `--timeout-ms MS` | 100–60000 ms per whole request; default 10000 |
+| `--strict-checksum` | Opt-in exact EIP-55 casing for the target address; no value |
 
-Address validation checks length and hex syntax, **not the EIP-55 checksum**. Mixed
-case is accepted. Chain IDs use exact integer arithmetic. Zero chain IDs, ENS
+By default, address validation checks length and hex syntax; any letter casing
+is accepted. Add `--strict-checksum` to `snapshot` to require the exact
+[EIP-55](https://eips.ethereum.org/EIPS/eip-55) casing before any RPC request or
+file creation. For example, this official test address has canonical uppercase
+letters (replace it with your intended target):
+
+```sh
+node bin/contract-watch.js snapshot --strict-checksum \
+  --address 0x52908400098527886E0F7030069857D2E4169EE7 \
+  --chain-id 1 --out snapshots/checksummed.json
+```
+
+This uses the explicit RPC environment variable from the capture example above.
+The lowercase spelling of that address fails in strict mode. Canonical EIP-55
+can also be entirely lowercase, such as
+`0xde709f2102306220921060314715629080e2fb77`; single-case input is accepted only
+when it exactly matches the checksum. The zero address remains valid.
+
+The flag may appear anywhere among snapshot options, at most once and without a
+value. `--strict-checksum=false`, a separate `true`/`false` value, duplicates and
+use with `inspect` or `diff` are usage errors. A casing mismatch gives exit **1**,
+empty stdout and the fixed `ADDRESS_CHECKSUM` stderr message; invalid hex syntax
+still gives `ADDRESS`. No input address or endpoint is echoed in these errors.
+RPC requests, saved snapshots and reports still use lowercase addresses; snapshot
+v1 and JSON diff v1 are unchanged. Inspect/diff continue reading existing files
+offline without applying a checksum to their stored lowercase addresses.
+
+EIP-55 uses Ethereum **Keccak-256**, not NIST SHA3-256. A small local BigInt
+implementation keeps this checksum-only feature dependency-free on Node.js 22+.
+It is checked against all eight official EIP-55 cases and independent Keccak
+reference results, including padding boundaries; see the
+[checksum contract and reference provenance](docs/PROTOCOL.md#address-checksum).
+The existing SHA-256 bytecode fingerprint is unchanged.
+
+Chain IDs use exact integer arithmetic. Zero chain IDs, ENS
 names, `pending`, duplicate flags, and unknown options are rejected. The zero
 address is a valid target and will usually have no code.
 

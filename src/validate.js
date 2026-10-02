@@ -1,11 +1,21 @@
 import { fail } from './errors.js';
+import { keccak256 } from './keccak.js';
 
 export const MAX_CODE_BYTES = 128 * 1024;
 const MAX_UINT256 = (1n << 256n) - 1n;
 
-export function address(value) {
+export function address(value, { strictChecksum = false } = {}) {
   if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(value)) fail('ADDRESS');
-  return value.toLowerCase();
+  const normalized = value.toLowerCase();
+  if (strictChecksum) {
+    // EIP-55 hashes ASCII lowercase hex WITHOUT 0x, not the decoded 20 bytes.
+    const hex = normalized.slice(2);
+    const hash = keccak256(Buffer.from(hex, 'ascii'));
+    const checksummed = hex.replace(/[a-f]/g, (digit, index) =>
+      Number.parseInt(hash[index], 16) >= 8 ? digit.toUpperCase() : digit);
+    if (value !== `0x${checksummed}`) fail('ADDRESS_CHECKSUM');
+  }
+  return normalized;
 }
 
 function inputInteger(value, code) {

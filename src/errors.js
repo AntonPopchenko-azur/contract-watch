@@ -1,6 +1,7 @@
 const messages = {
   USAGE: 'Invalid command or options. Run contract-watch --help.',
   ADDRESS: 'Address must be 0x followed by exactly 40 hexadecimal digits.',
+  ADDRESS_CHECKSUM: 'Address must use its exact EIP-55 checksum casing.',
   CHAIN_ID: 'Chain ID must be a positive decimal or hexadecimal integer of at most 256 bits.',
   BLOCK: 'Block must be latest, safe, finalized, or a nonnegative decimal/hexadecimal integer.',
   RPC_URL: 'RPC URL must use HTTP(S), without embedded credentials or a fragment.',

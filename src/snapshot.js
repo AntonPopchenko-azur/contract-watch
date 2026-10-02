@@ -21,8 +21,11 @@ function blockHeader(value) {
   return { number: quantity(value.number), hash: data(value.hash, 32) };
 }
 
-export async function capture({ rpcUrl, address: inputAddress, chainId: expectedChain, block = 'latest', timeoutMs = 10000 }) {
-  const target = address(inputAddress);
+export async function capture({
+  rpcUrl, address: inputAddress, chainId: expectedChain,
+  block = 'latest', timeoutMs = 10000, strictChecksum = false
+}) {
+  const target = address(inputAddress, { strictChecksum });
   const expected = chainId(expectedChain);
   const tag = blockTag(block);
   const rpc = createRpc(rpcUrl, timeoutMs);

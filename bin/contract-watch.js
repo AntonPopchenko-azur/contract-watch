@@ -15,6 +15,7 @@ Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
   --block BLOCK       latest (default), safe, finalized, decimal or hex number
   --timeout-ms MS     Total timeout per request, 100–60000 (default 10000)
+  --strict-checksum   Require exact EIP-55 address casing before any RPC call
 
 Diff options:
   --json             Version 1 JSON report on stdout; errors remain on stderr
@@ -22,19 +23,24 @@ Diff options:
 
 All state reads use one block hash and require EIP-1898 support.
 Output files are never overwritten. Parent directory must already exist.
-Address validation checks 20-byte hex syntax, not EIP-55 checksum.
+Address validation defaults to 20-byte hex syntax; EIP-55 checking is opt-in.
 Diff is offline. Default exit status: 0 success (including changes), 1 error.
 Inspect is offline and accepts one snapshot v1 file, no options; exit 0/1.
 This tool does not assess safety, resolve beacons, or detect every proxy type.
 `;
 
 function parseSnapshot(args) {
-  const allowed = new Set(['--address', '--chain-id', '--out', '--rpc', '--block', '--timeout-ms']);
+  const allowed = new Set(['--address', '--chain-id', '--out', '--rpc', '--block', '--timeout-ms', '--strict-checksum']);
   const options = {};
-  for (let index = 0; index < args.length; index += 2) {
+  for (let index = 0; index < args.length; index++) {
     const key = args[index];
-    const value = args[index + 1];
-    if (!allowed.has(key) || Object.hasOwn(options, key) || !value || value.startsWith('--')) fail('USAGE');
+    if (!allowed.has(key) || Object.hasOwn(options, key)) fail('USAGE');
+    if (key === '--strict-checksum') {
+      options[key] = true;
+      continue;
+    }
+    const value = args[++index];
+    if (!value || value.startsWith('--')) fail('USAGE');
     options[key] = value;
   }
   if (!options['--address'] || !options['--chain-id'] || !options['--out']) fail('USAGE');
@@ -73,7 +79,8 @@ async function main(args) {
     const snapshot = await capture({
       rpcUrl: options['--rpc'] ?? process.env.CONTRACT_WATCH_RPC_URL,
       address: options['--address'], chainId: options['--chain-id'],
-      block: options['--block'], timeoutMs: timeout(options['--timeout-ms'])
+      block: options['--block'], timeoutMs: timeout(options['--timeout-ms']),
+      strictChecksum: options['--strict-checksum'] ?? false
     });
     await saveSnapshot(options['--out'], snapshot);
     process.stdout.write(`${snapshotReport(snapshot)}\nSnapshot saved.\n`);

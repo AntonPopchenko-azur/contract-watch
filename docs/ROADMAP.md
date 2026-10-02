@@ -8,7 +8,8 @@ release gate. The annotated `v0.1.0` tag records the successful verification run
 Item 08 adds the versioned offline JSON diff on 2026-09-30.
 Item 09 adds an opt-in change exit status on 2026-10-01.
 Item 10 adds offline inspection of saved snapshots on 2026-10-01.
-Items 11–45 have not started.
+Item 11 adds opt-in strict EIP-55 target validation on 2026-10-02.
+Items 12–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -53,11 +54,15 @@ There is no worker-owned scheduler or automatic endless backlog.
   labels, exact integers, empty/noncanonical state, corrupt and unsupported
   files, size limits, unusual files, rejected flags, no RPC and unchanged input.
   Existing commands and schemas are preserved. Completed 2026-10-01.
+- [x] **11 — Strict checksum option.** Add snapshot-only `--strict-checksum`
+  with exact EIP-55 casing and dependency-free Ethereum Keccak-256. All eight
+  official address vectors, independent hash/padding vectors, wrong casing,
+  syntax and CLI flags are tested. Validation precedes RPC/file creation;
+  default syntax-only behavior, lowercase v1 persistence and offline commands
+  remain compatible. Completed 2026-10-02.
 
 ## Planned increments
 
-- [ ] **11 — Strict checksum option.** Add verified EIP-55 support with official
-  vectors and clear opt-in behavior, keeping dependency decisions explicit.
 - [ ] **12 — Block hash input.** Accept an explicit block hash, resolve metadata,
   and test missing/noncanonical blocks without weakening consistency.
 - [ ] **13 — Confirmation-depth capture.** Resolve a requested depth safely,
