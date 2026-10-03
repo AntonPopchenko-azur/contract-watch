@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { address, chainId, blockTag, blockHash, depth, quantity, data } from './validate.js';
 import { fail } from './errors.js';
 import { createRpc } from './rpc.js';
+import { resolveBeacon } from './beacon.js';
 
 // https://eips.ethereum.org/EIPS/eip-1967
 export const SLOTS = Object.freeze({
@@ -21,10 +22,20 @@ function blockHeader(value) {
   return { number: quantity(value.number), hash: data(value.hash, 32) };
 }
 
-export async function capture({
+// Keep the existing snapshot-only API and v1 file contract unchanged.
+export async function capture(options) {
+  return (await captureObservation(options, false)).snapshot;
+}
+
+// Resolution is transient: callers must not add it to a snapshot v1 object.
+export async function captureWithBeacon(options) {
+  return captureObservation(options, true);
+}
+
+async function captureObservation({
   rpcUrl, address: inputAddress, chainId: expectedChain,
   block, blockHash: inputHash, depth: inputDepth, timeoutMs = 10000, strictChecksum = false
-}) {
+}, includeBeacon) {
   if ([block, inputHash, inputDepth].filter(value => value !== undefined).length > 1) fail('USAGE');
   const target = address(inputAddress, { strictChecksum });
   const expected = chainId(expectedChain);
@@ -59,14 +70,16 @@ export async function capture({
   for (const [name, position] of Object.entries(SLOTS)) {
     slots[name] = data(await rpc('eth_getStorageAt', [target, position, selector]), 32);
   }
+  const beaconResolution = includeBeacon ? await resolveBeacon(rpc, target, code, slots, pinned.hash) : undefined;
   // A late reorg cannot mix state (all reads use a hash); detect canonical changes too.
   const confirmed = blockHeader(await rpc('eth_getBlockByNumber', [pinned.number, false]));
   if (confirmed.number !== pinned.number || confirmed.hash !== pinned.hash) fail('BLOCK_CHANGED');
   if (BigInt(quantity(await rpc('eth_chainId'))).toString() !== expected) fail('CHAIN_MISMATCH');
-  return {
+  const snapshot = {
     schemaVersion: 1, source: 'rpc', capturedAt: new Date().toISOString(),
     chainId: expected, address: target, block: pinned, code, slots
   };
+  return { snapshot, beaconResolution };
 }
 
 function keys(value, expected) {

@@ -1,0 +1,92 @@
+{
+  "source": "https://docs.soliditylang.org/en/latest/abi-spec.html",
+  "signature": "implementation()",
+  "selector": "0x5c60da1b",
+  "valid": [
+    {
+      "name": "address",
+      "result": "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678",
+      "implementation": "0x1234567890abcdef1234567890abcdef12345678"
+    },
+    {
+      "name": "uppercase hex",
+      "result": "0x0000000000000000000000001234567890ABCDEF1234567890ABCDEF12345678",
+      "implementation": "0x1234567890abcdef1234567890abcdef12345678"
+    },
+    {
+      "name": "low address with padding",
+      "result": "0x0000000000000000000000000000000000000000000000000000000000000001",
+      "implementation": "0x0000000000000000000000000000000000000001"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "zero address",
+      "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "empty data",
+      "result": "0x"
+    },
+    {
+      "name": "unencoded 20-byte address",
+      "result": "0x1234567890abcdef1234567890abcdef12345678"
+    },
+    {
+      "name": "31 bytes",
+      "result": "0x0000000000000000000000001234567890abcdef1234567890abcdef123456"
+    },
+    {
+      "name": "33 bytes",
+      "result": "0x0000000000000000000000001234567890abcdef1234567890abcdef1234567800"
+    },
+    {
+      "name": "two words",
+      "result": "0x0000000000000000000000001234567890abcdef1234567890abcdef123456780000000000000000000000001234567890abcdef1234567890abcdef12345678"
+    },
+    {
+      "name": "nonzero high padding",
+      "result": "0x0100000000000000000000001234567890abcdef1234567890abcdef12345678"
+    },
+    {
+      "name": "nonhex",
+      "result": "0x0000000000000000000000001234567890abcdef1234567890abcdef1234567g"
+    },
+    {
+      "name": "odd length",
+      "result": "0x0000000000000000000000001234567890abcdef1234567890abcdef1234567"
+    },
+    {
+      "name": "newline",
+      "result": "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678\n"
+    },
+    {
+      "name": "uppercase prefix",
+      "result": "0X0000000000000000000000001234567890abcdef1234567890abcdef12345678"
+    },
+    {
+      "name": "missing prefix",
+      "result": "0000000000000000000000001234567890abcdef1234567890abcdef12345678"
+    },
+    {
+      "name": "null",
+      "result": null
+    },
+    {
+      "name": "object",
+      "result": {
+        "message": "SENSITIVE_TEST_ABI"
+      }
+    },
+    {
+      "name": "number",
+      "result": 1
+    },
+    {
+      "name": "array",
+      "result": [
+        "0x0000000000000000000000001234567890abcdef1234567890abcdef12345678"
+      ]
+    }
+  ]
+}

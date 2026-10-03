@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { fail } from './errors.js';
 import { SLOTS, ZERO_WORD, validateSnapshot } from './snapshot.js';
+import { beaconReport } from './beacon.js';
 
 export function slotValue(raw) {
   if (raw === ZERO_WORD) return 'empty';
@@ -36,7 +37,7 @@ function slotDetails(raw) {
   return { raw, status, address: status === 'address' ? `0x${raw.slice(-40)}` : null };
 }
 
-export function snapshotReport(snapshot) {
+export function snapshotReport(snapshot, { beaconResolution } = {}) {
   validateSnapshot(snapshot);
   return [
     `Contract Watch | chain ${snapshot.chainId} | ${snapshot.address}`,
@@ -44,7 +45,10 @@ export function snapshotReport(snapshot) {
     `Block: ${BigInt(snapshot.block.number)} (${snapshot.block.hash})`,
     `Code: ${codeSummary(codeDetails(snapshot.code))}`,
     ...Object.keys(SLOTS).map(name => `${name}: ${slotValue(snapshot.slots[name])}`),
-    observation(snapshot)
+    beaconResolution?.status === 'resolved'
+      ? 'Beacon implementation() returned an address; proxy behavior and implementation code are unverified.'
+      : observation(snapshot),
+    ...(beaconResolution ? [beaconReport(beaconResolution)] : [])
   ].join('\n');
 }
 

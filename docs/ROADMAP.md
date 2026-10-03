@@ -11,7 +11,8 @@ Item 10 adds offline inspection of saved snapshots on 2026-10-01.
 Item 11 adds opt-in strict EIP-55 target validation on 2026-10-02.
 Item 12 adds explicit canonical block-hash selection on 2026-10-02.
 Item 13 adds capture at a fixed depth behind the initial latest head on 2026-10-03.
-Items 14–45 have not started.
+Item 14 adds opt-in live beacon implementation observations on 2026-10-03.
+Items 15–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -74,11 +75,16 @@ There is no worker-owned scheduler or automatic endless backlog.
   head, exact RPC sequences and safe failures without snapshots. Existing
   selectors, checksum mode, v1 formats and final block/chain checks remain;
   request budgets and finality limits are documented. Completed 2026-10-03.
+- [x] **14 — Beacon implementation resolution.** Add `snapshot --resolve-beacon`
+  with one eligible hash-pinned implementation() call, fixed gas/time/body
+  limits, strict ABI address fixtures and explicit skip reasons. Live results
+  remain separate from strict v1 files; offline inspect/diff are unchanged.
+  Loopback/CLI tests cover selectors, budgets, malformed/zero returns, provider
+  failures, reorg/chain checks, redaction and atomic persistence. Completed
+  2026-10-03.
 
 ## Planned increments
 
-- [ ] **14 — Beacon implementation resolution.** Add a bounded read-only
-  `implementation()` call at the same hash and validated ABI return fixtures.
 - [ ] **15 — Resolved implementation code.** Record target implementation code
   separately, with no-code and oversize tests and a format migration plan.
 - [ ] **16 — Beacon upgrade comparisons.** Report implementation changes behind

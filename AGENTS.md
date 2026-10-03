@@ -44,7 +44,11 @@ GitHub release page. Never replace an existing published tag.
   keys, raw provider errors, arbitrary input strings, or underlying error stacks.
 - Preserve raw words. Empty slots, noncanonical data and ordinary contracts must
   not be converted into claims that a contract is safe or that all proxies are
-  detected. Beacon resolution remains a separately planned feature.
+  detected. Opt-in beacon resolution is a live observation only; keep snapshot
+  v1 raw storage and strict unknown-field validation unchanged. Its dedicated
+  implementation() call is hash-pinned, limited to 100000 gas, 4 KiB and at most
+  5 seconds, with no generic eth_call access. Implementation bytecode, persisted
+  beacon observations, upgrade comparisons and migration remain separate work.
 - For each functional change, add meaningful regression/protocol/file tests and
   document user-visible behavior. Run `npm test` and `npm run demo` as appropriate.
   Tests use local fake RPC and temporary directories, without keys or external

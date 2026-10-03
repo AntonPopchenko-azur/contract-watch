@@ -17,6 +17,8 @@ const messages = {
   RPC_ENVELOPE: 'RPC returned an invalid JSON-RPC response.',
   RPC_REMOTE: 'RPC rejected a read request. Check chain availability, historical state, and EIP-1898 support.',
   RPC_DATA: 'RPC returned malformed chain, block, bytecode, or storage data.',
+  BEACON_RESULT: 'Beacon implementation() must return exactly one nonzero ABI-encoded address.',
+  BEACON_SIZE: 'Beacon RPC response exceeded the 4 KiB limit.',
   CHAIN_MISMATCH: 'RPC chain ID does not match the requested chain ID.',
   BLOCK_UNAVAILABLE: 'Requested block is unavailable.',
   BLOCK_NOT_CANONICAL: 'Requested block hash is not canonical at its reported height.',

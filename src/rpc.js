@@ -1,7 +1,8 @@
 import http from 'node:http';
 import https from 'node:https';
 import { WatchError, fail } from './errors.js';
-import { rpcUrl, timeout } from './validate.js';
+import { rpcUrl, timeout, address, blockHash } from './validate.js';
+import { BEACON_SELECTOR, BEACON_GAS, MAX_BEACON_RESPONSE_BYTES, MAX_BEACON_TIMEOUT_MS } from './beacon.js';
 
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
 const READ_METHODS = new Set([
@@ -13,8 +14,8 @@ export function createRpc(endpoint, timeoutMs = 10000) {
   timeout(String(timeoutMs));
   let nextId = 0;
 
-  return async function rpc(method, params = []) {
-    if (!READ_METHODS.has(method)) fail('USAGE');
+  async function requestRpc(method, params, maxBytes = MAX_RESPONSE_BYTES, requestTimeout = timeoutMs) {
+    const sizeCode = method === 'eth_call' ? 'BEACON_SIZE' : 'RPC_SIZE';
     const id = ++nextId;
     const payload = JSON.stringify({ jsonrpc: '2.0', id, method, params });
     return new Promise((resolve, reject) => {
@@ -31,7 +32,7 @@ export function createRpc(endpoint, timeoutMs = 10000) {
         } else resolve(result);
       };
       const stop = code => finish(new WatchError(code));
-      timer = setTimeout(() => stop('RPC_TIMEOUT'), timeoutMs);
+      timer = setTimeout(() => stop('RPC_TIMEOUT'), requestTimeout);
       try {
         request = (url.protocol === 'https:' ? https : http).request(url, {
           method: 'POST',
@@ -47,14 +48,14 @@ export function createRpc(endpoint, timeoutMs = 10000) {
           if (response.statusCode !== 200) { stop('RPC_HTTP'); response.destroy(); return; }
           const encoding = response.headers['content-encoding'];
           if (encoding && encoding !== 'identity') { stop('RPC_ENCODING'); response.destroy(); return; }
-          if (Number(response.headers['content-length']) > MAX_RESPONSE_BYTES) {
-            stop('RPC_SIZE'); response.destroy(); return;
+          if (Number(response.headers['content-length']) > maxBytes) {
+            stop(sizeCode); response.destroy(); return;
           }
           let size = 0;
           const chunks = [];
           response.on('data', chunk => {
             size += chunk.length;
-            if (size > MAX_RESPONSE_BYTES) { stop('RPC_SIZE'); response.destroy(); return; }
+            if (size > maxBytes) { stop(sizeCode); response.destroy(); return; }
             chunks.push(chunk);
           });
           response.on('aborted', () => stop('RPC_NETWORK'));
@@ -77,5 +78,16 @@ export function createRpc(endpoint, timeoutMs = 10000) {
         request.end(payload);
       } catch { stop('RPC_NETWORK'); }
     });
+  }
+
+  const rpc = async (method, params = []) => {
+    if (!READ_METHODS.has(method)) fail('USAGE');
+    return requestRpc(method, params);
   };
+  // eth_call is not in the generic allowlist. This fixed operation is the only call path.
+  rpc.beaconImplementation = async (target, beacon, hash) => requestRpc('eth_call', [
+    { from: address(target), to: address(beacon), gas: BEACON_GAS, value: '0x0', input: BEACON_SELECTOR },
+    { blockHash: blockHash(hash), requireCanonical: true }
+  ], MAX_BEACON_RESPONSE_BYTES, Math.min(timeoutMs, MAX_BEACON_TIMEOUT_MS));
+  return rpc;
 }

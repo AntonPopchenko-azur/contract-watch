@@ -129,6 +129,8 @@ RPC honesty. A provider may have pruned the selected state.
 4. `eth_getCode` reads target code using the resolved hash selector.
 5. Three `eth_getStorageAt` calls read implementation, admin, and beacon using
    that identical selector: `{ "blockHash": "0x…", "requireCanonical": true }`.
+   With `--resolve-beacon`, eligible slot data triggers one bounded `eth_call`
+   at this same hash, with strict ABI validation as specified below.
 6. `eth_getBlockByNumber` at the resolved number verifies the same hash is still
    canonical in every selection mode, and `eth_chainId` is checked again.
    A different number/hash on this final check gives `BLOCK_CHANGED`; missing
@@ -141,12 +143,17 @@ The final recheck detects a reorg at that point, not permanent finality. An
 unsupported selector, unavailable historical state, or provider error aborts
 capture. No fallback, retry, batch, or write method is used.
 
-Successful tag/number captures and depth 0 make eight sequential requests;
+Without a beacon call, successful tag/number captures and depth 0 make eight sequential requests;
 hash selection and positive depth make nine. Their sum of request timeouts is
 bounded by eight or nine times the configured per-request timeout, respectively.
+An eligible beacon adds one request with timeout `min(timeoutMs, 5000)`: at most
+9 requests / `8*T + min(T,5000)` ms for tags, numbers and depth 0, or 10 requests /
+`9*T + min(T,5000)` ms for hash and positive depth, where T is the configured
+timeout in ms. Skipped resolution adds zero requests.
 This excludes local file work. Depth underflow stops after two requests; invalid
-options make none. Depth adds no RPC methods: the allowlist remains chain,
-block-by-number/hash, code and storage reads. Provider errors (including
+options make none. The generic allowlist remains chain, block-by-number/hash,
+code and storage reads; only a dedicated beacon operation can use `eth_call`.
+Provider errors (including
 unsupported hash lookups, pruned state, noncanonical state or rejected EIP-1898 selectors) remain
 fixed `RPC_REMOTE` errors without raw provider content. Any failure aborts
 without saving a snapshot. Checking canonicality twice does not establish
@@ -162,8 +169,8 @@ The [EIP-1967](https://eips.ethereum.org/EIPS/eip-1967) positions are:
 
 The standard gives the implementation slot precedence over the beacon slot.
 Contract Watch retains both and labels simultaneous population as ambiguous.
-Resolving the implementation behind a beacon requires a separate call and is
-not part of 0.1.0. An admin slot may be absent; it is not a general authority map.
+Opt-in live resolution is described below. An admin slot may be absent; it is
+not a general authority map.
 
 RPC quantities must be minimally encoded hex strings. Byte data must have a `0x`
 prefix and even hex length. Storage words and block hashes must have exactly
@@ -172,6 +179,77 @@ Response IDs must exactly match their requests, `jsonrpc` must be `2.0`, and
 exactly one of `result` or `error` must be present. Provider error payloads are
 discarded. See [Ethereum JSON-RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 and [JSON-RPC 2.0](https://www.jsonrpc.org/specification) for method/envelope details.
+
+## Beacon resolution (live only)
+
+`snapshot --resolve-beacon` is a valueless, snapshot-only opt-in. Unknown,
+repeated or valued flags are `USAGE` errors before RPC. The default capture
+returns the same v1 snapshot and performs no beacon call. Internally,
+`captureWithBeacon` returns a separate `{ snapshot, beaconResolution }` result;
+only `snapshot` may be passed to the existing file writer. The transient
+resolution is printed only after all validation/rechecks and a successful save.
+
+Eligibility is evaluated after reading target code and all raw storage words,
+in this order. Ineligible cases are successful snapshots with an explicit skip:
+
+| Condition | Result / additional requests |
+| --- | --- |
+| Empty target code | Skip `NO_TARGET_CODE` / 0 |
+| Any slot has nonzero high 12 bytes, including admin | Skip `NONCANONICAL_SLOT` / 0 |
+| Nonzero implementation slot (even with a nonzero beacon) | Skip `IMPLEMENTATION_SLOT_POPULATED` / 0 |
+| Empty beacon slot | Skip `EMPTY_BEACON` / 0 |
+| Otherwise | One fixed beacon call |
+
+This follows [EIP-1967's beacon selection rule](https://eips.ethereum.org/EIPS/eip-1967#beacon-contract-address),
+with additional conservative code/padding checks. Raw slots are never rewritten.
+Both populated slots remain ambiguous; the program does not choose a proxy type.
+
+The request uses [eth_call](https://ethereum.org/developers/docs/apis/json-rpc/#eth_call)
+with exactly two parameters:
+
+```text
+{ from: TARGET, to: BEACON, gas: "0x186a0", value: "0x0", input: "0x5c60da1b" }
+{ blockHash: PINNED_HASH, requireCanonical: true }
+```
+
+TARGET and BEACON are normalized addresses; BEACON comes from the observed
+canonical slot. The caller is the target, the gas limit is fixed at 100000,
+and input is the four-byte selector for `implementation()` with no arguments.
+The [Solidity ABI](https://docs.soliditylang.org/en/latest/abi-spec.html) defines
+the selector as the first four bytes of Keccak-256 of that signature and the
+address return as a 32-byte word with 12 zero high bytes. Exactly one nonzero
+address is required by this tool. Case-insensitive hex digits are normalized;
+the prefix must be `0x`. Zero, wrong length, nonhex, nonzero padding and trailing
+data give `BEACON_RESULT`. Synthetic ABI fixtures cover these cases.
+
+The call's full HTTP response body is capped at 4096 bytes, including its JSON
+envelope and any error data; declared and streamed excess gives `BEACON_SIZE`.
+The normal 16 KiB header cap and no-redirect/no-compression policy still apply.
+Its timeout, including headers/body, is `min(timeoutMs, 5000)` milliseconds.
+Revert, out-of-gas, pruned state and unsupported EIP-1898 selectors are fixed
+`RPC_REMOTE` errors; timeout is `RPC_TIMEOUT`. Invalid envelopes keep their
+existing safe error. No provider payload or bad ABI input is echoed.
+
+All state reads, including this call, use the identical EIP-1898 hash selector.
+The final canonical-block and chain checks run after the call. Any fatal error
+aborts capture without a snapshot or partial stdout. There is no gas estimation,
+retry, selector fallback, caller sweep, recursion, additional bytecode lookup,
+state override, signing or transaction submission. The generic RPC function
+still rejects `eth_call`; the dedicated operation constructs its fixed payload.
+
+The transient result has `status: resolved`, a beacon address, the normalized
+raw return word and decoded implementation address, or `status: skipped` with
+one of the reasons above. Resolved means that a valid response was observed;
+it does not establish implementation code, proxy behavior, safety, finality or
+caller independence. EIP-1967 says the response should not depend on the caller;
+that property is not tested by one call.
+
+No resolution field is added under snapshot schemaVersion 1. Existing strict
+unknown-field checks, private atomic writes and offline v1 inspect/diff stay
+unchanged. Offline reports have no live response to reproduce; JSON diff v1
+continues comparing only code and raw slots. It cannot detect an implementation
+change behind an unchanged beacon. Persisted observations, implementation code,
+beacon upgrade diffs and migration are separate roadmap work.
 
 ## File contract
 

@@ -164,6 +164,7 @@ credentials and fragments are rejected. The CLI never prints or stores the URL.
 | `--depth N` | Blocks behind the initial `latest` height; canonical decimal `0..2^256-1`, at most 78 digits |
 | `--timeout-ms MS` | 100–60000 ms per whole request; default 10000 |
 | `--strict-checksum` | Opt-in exact EIP-55 casing for the target address; no value |
+| `--resolve-beacon` | Opt-in bounded beacon `implementation()` read; result in live text report only |
 
 To select a particular block by hash, replace `--block finalized` in the capture
 example with `--block-hash HASH`, using the intended block's full hash. The
@@ -258,6 +259,47 @@ address, chain ID, and source kind. Without `--exit-code`, status is **0 for
 success, including a diff with changes**. Errors use status **1** and stable
 codes and fixed messages; URLs, paths, remote error text, and stacks are omitted.
 
+## Observe a beacon implementation
+
+Add the valueless `--resolve-beacon` flag to a snapshot command to observe the
+address returned by an eligible beacon's `implementation()` at the selected
+block. It works with the existing block, hash, depth, checksum, timeout and RPC
+options. Repeating the flag, adding a value or using it with `inspect`/`diff`
+gives `USAGE` before RPC. Without the flag, capture never makes this call.
+
+**The result is live text only and is not saved in the snapshot.** The file
+remains strict snapshot v1, with the original raw storage words and no additional
+fields. `inspect` and `diff` still work offline on old and new v1 files; they
+cannot replay this observation or detect a changed implementation behind an
+unchanged beacon. No new snapshot version or migration is introduced.
+
+The CLI makes at most one call, after reading target code and all three slots.
+It requires nonempty target code, canonical address padding in every slot, an
+empty implementation slot and a nonzero beacon address. Otherwise it reports
+`Beacon resolution skipped` with the reason and saves the ordinary snapshot.
+Both implementation and beacon slots populated remain ambiguous evidence and
+are not resolved. Noncanonical admin data also causes a conservative skip.
+
+The fixed call uses the target as `from`, the observed beacon as `to`, zero
+value, `implementation()` input `0x5c60da1b`, and 100000 gas. Its EIP-1898 selector
+uses the same block hash and `requireCanonical: true` as all state reads.
+Timeout is the smaller of `--timeout-ms` and 5000 ms; the entire response is
+limited to 4 KiB. Gas is never estimated or increased. A contract needing more
+gas/time fails; there is no retry or fallback.
+
+Only one ABI-encoded, nonzero address is accepted: exactly 32 bytes of hex with
+12 leading zero bytes, normalized to lowercase. Zero, empty, malformed,
+noncanonical or trailing return data fails with `BEACON_RESULT`. Reverts and
+unsupported selectors give `RPC_REMOTE`, timeouts `RPC_TIMEOUT`, and responses
+over 4 KiB `BEACON_SIZE`. These failures and failed final block/chain rechecks
+produce exit 1, empty stdout and no new snapshot. No partial live result is
+printed; provider messages are discarded.
+
+An accepted response is an observation, not proof of proxy behavior, a valid
+implementation contract or safety. The call simulates execution without sending
+a transaction. Caller independence is required by the beacon specification but
+is not tested here. See the [beacon protocol contract](docs/PROTOCOL.md#beacon-resolution-live-only).
+
 ## What a snapshot means
 
 The CLI checks the chain, resolves the requested block, and passes the same
@@ -275,7 +317,8 @@ atomically on filesystems supporting same-directory hard links and use mode
 
 Limits are 1 MiB per HTTP response, 16 KiB of HTTP headers, 128 KiB of target code,
 and 512 KiB per snapshot input. Redirects and compressed responses are rejected.
-Successful captures have these bounded sequential RPC budgets, where `T` is
+Without an eligible beacon call, successful captures have these bounded
+sequential RPC budgets, where `T` is
 `--timeout-ms` (10 seconds by default):
 
 | Selection | Requests | Maximum sum of request timeouts |
@@ -285,12 +328,17 @@ Successful captures have these bounded sequential RPC budgets, where `T` is
 | `--depth 0` | 8 | `8 × T` |
 | `--depth N` with `N > 0` | 9 | `9 × T` |
 
+An eligible `--resolve-beacon` adds one request and at most `min(T, 5000 ms)`:
+9 requests for tag/number or depth 0, 10 for hash or positive depth. Skips add
+no requests. The beacon response limit is 4 KiB instead of the normal 1 MiB.
+
 There are no retries or background loop. Depth underflow stops after the chain
 check and initial head lookup (two requests). Local file work is outside this
 RPC timeout budget. Block lookups request transaction hashes only,
 not full transaction objects; the same 1 MiB response limit applies to them.
-The RPC allowlist contains only chain, block, code, and storage reads; no wallet,
-signing, transaction submission, or `eth_call` is used in this version.
+The generic RPC allowlist contains only chain, block, code, and storage reads.
+A dedicated operation permits only the fixed beacon call above. No arbitrary
+calls, wallet, signing or transaction submission are exposed.
 
 ## Interpretation and limits
 
@@ -302,9 +350,10 @@ signing, transaction submission, or `eth_call` is used in this version.
 - With no code, the report says there is no code **at that block**. With empty
   target slots it says no EIP-1967 target was found, including ordinary contracts.
   Other proxy patterns may still exist; the tool does not identify every proxy.
-- A beacon address is recorded but its `implementation()` is not called. An
-  upgrade behind an unchanged beacon is invisible in this release. Implementation
-  contract bytecode is also outside this release's scope.
+- A beacon address is recorded. Its `implementation()` is queried only with the
+  opt-in live feature above. An upgrade behind an unchanged beacon remains
+  invisible to saved snapshot comparisons. Implementation contract bytecode is
+  also outside this increment's scope.
 - Snapshots compare endpoints in time, so intermediate upgrades can be missed.
   A changed slot does not by itself prove that an upgrade transaction occurred.
   Same-height fork comparisons and inconsistent same-hash data receive notices.
