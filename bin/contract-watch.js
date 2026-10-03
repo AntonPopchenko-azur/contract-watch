@@ -14,7 +14,9 @@ Usage:
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
   --block BLOCK       latest (default), safe, finalized, decimal or hex number
-  --block-hash HASH   Exact 32-byte block hash; cannot be combined with --block
+  --block-hash HASH   Exact 32-byte block hash
+  --depth N           N blocks behind the initial latest head (0 means that head)
+                      Decimal 0..2^256-1, at most 78 digits, no leading zeros
   --timeout-ms MS     Total timeout per request, 100–60000 (default 10000)
   --strict-checksum   Require exact EIP-55 address casing before any RPC call
 
@@ -23,6 +25,7 @@ Diff options:
   --exit-code        Exit 2 for state changes, 0 without changes, 1 for errors
 
 All state reads use one block hash and require EIP-1898 support.
+Choose at most one of --block, --block-hash or --depth. Depth is not finality.
 Output files are never overwritten. Parent directory must already exist.
 Address validation defaults to 20-byte hex syntax; EIP-55 checking is opt-in.
 Diff is offline. Default exit status: 0 success (including changes), 1 error.
@@ -32,7 +35,7 @@ This tool does not assess safety, resolve beacons, or detect every proxy type.
 
 function parseSnapshot(args) {
   const allowed = new Set([
-    '--address', '--chain-id', '--out', '--rpc', '--block', '--block-hash', '--timeout-ms', '--strict-checksum'
+    '--address', '--chain-id', '--out', '--rpc', '--block', '--block-hash', '--depth', '--timeout-ms', '--strict-checksum'
   ]);
   const options = {};
   for (let index = 0; index < args.length; index++) {
@@ -47,7 +50,7 @@ function parseSnapshot(args) {
     options[key] = value;
   }
   if (!options['--address'] || !options['--chain-id'] || !options['--out']) fail('USAGE');
-  if (Object.hasOwn(options, '--block') && Object.hasOwn(options, '--block-hash')) fail('USAGE');
+  if (['--block', '--block-hash', '--depth'].filter(key => Object.hasOwn(options, key)).length > 1) fail('USAGE');
   return options;
 }
 
@@ -83,7 +86,7 @@ async function main(args) {
     const snapshot = await capture({
       rpcUrl: options['--rpc'] ?? process.env.CONTRACT_WATCH_RPC_URL,
       address: options['--address'], chainId: options['--chain-id'],
-      block: options['--block'], blockHash: options['--block-hash'],
+      block: options['--block'], blockHash: options['--block-hash'], depth: options['--depth'],
       timeoutMs: timeout(options['--timeout-ms']),
       strictChecksum: options['--strict-checksum'] ?? false
     });

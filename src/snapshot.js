@@ -2,7 +2,7 @@ import { open, link, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { address, chainId, blockTag, blockHash, quantity, data } from './validate.js';
+import { address, chainId, blockTag, blockHash, depth, quantity, data } from './validate.js';
 import { fail } from './errors.js';
 import { createRpc } from './rpc.js';
 
@@ -23,20 +23,30 @@ function blockHeader(value) {
 
 export async function capture({
   rpcUrl, address: inputAddress, chainId: expectedChain,
-  block, blockHash: inputHash, timeoutMs = 10000, strictChecksum = false
+  block, blockHash: inputHash, depth: inputDepth, timeoutMs = 10000, strictChecksum = false
 }) {
-  if (block !== undefined && inputHash !== undefined) fail('USAGE');
+  if ([block, inputHash, inputDepth].filter(value => value !== undefined).length > 1) fail('USAGE');
   const target = address(inputAddress, { strictChecksum });
   const expected = chainId(expectedChain);
   const hash = inputHash === undefined ? undefined : blockHash(inputHash);
+  const distance = inputDepth === undefined ? undefined : depth(inputDepth);
   const tag = hash === undefined ? blockTag(block) : undefined;
   const rpc = createRpc(rpcUrl, timeoutMs);
   const actual = BigInt(quantity(await rpc('eth_chainId'))).toString();
   if (actual !== expected) fail('CHAIN_MISMATCH');
-  const pinned = blockHeader(await rpc(
+  let pinned = blockHeader(await rpc(
     hash === undefined ? 'eth_getBlockByNumber' : 'eth_getBlockByHash', [hash ?? tag, false]
   ));
-  if (hash !== undefined) {
+  if (distance !== undefined) {
+    // In depth mode the first lookup is latest. Fix the target once, before reads.
+    const initialHeight = BigInt(pinned.number);
+    if (distance > initialHeight) fail('DEPTH_UNDERFLOW');
+    if (distance > 0n) {
+      const number = `0x${(initialHeight - distance).toString(16)}`;
+      pinned = blockHeader(await rpc('eth_getBlockByNumber', [number, false]));
+      if (pinned.number !== number) fail('RPC_DATA');
+    }
+  } else if (hash !== undefined) {
     if (pinned.hash !== hash) fail('RPC_DATA');
     // A by-hash lookup may return a side-chain block. Reject it before state reads.
     const canonical = blockHeader(await rpc('eth_getBlockByNumber', [pinned.number, false]));

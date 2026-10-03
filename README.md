@@ -160,7 +160,8 @@ credentials and fragments are rejected. The CLI never prints or stores the URL.
 | `--out FILE` | Required new snapshot path in an existing directory |
 | `--rpc URL` | Explicit HTTP(S) RPC, or use `CONTRACT_WATCH_RPC_URL` |
 | `--block BLOCK` | `latest` by default; `safe`, `finalized`, decimal or hex block number also accepted |
-| `--block-hash HASH` | Exact `0x` plus 64 hex digits; canonical block only; conflicts with `--block` |
+| `--block-hash HASH` | Exact `0x` plus 64 hex digits; canonical block only |
+| `--depth N` | Blocks behind the initial `latest` height; canonical decimal `0..2^256-1`, at most 78 digits |
 | `--timeout-ms MS` | 100–60000 ms per whole request; default 10000 |
 | `--strict-checksum` | Opt-in exact EIP-55 casing for the target address; no value |
 
@@ -169,8 +170,8 @@ example with `--block-hash HASH`, using the intended block's full hash. The
 `0x` prefix must be lowercase; hex letters may use any case and are normalized
 to lowercase. Validation happens before RPC or file creation. The option takes
 one value and may appear anywhere among snapshot options, at most once.
-Combining it with any explicit `--block`, including `--block latest`, is a usage
-error. `--block-hash=HASH`, missing values and duplicates are also usage errors;
+Combining it with `--depth` or any explicit `--block`, including `--block latest`,
+is a usage error. `--block-hash=HASH`, missing values and duplicates are also usage errors;
 invalid hash syntax gives `BLOCK_HASH`. Errors exit 1 with empty stdout and fixed
 safe stderr messages. The option is not accepted by `inspect` or `diff`.
 
@@ -183,12 +184,36 @@ by the existing canonical-block and chain rechecks. There is no fallback to
 another block if the hash, canonical state or historical data is unavailable.
 An explicit hash does not establish finality or independently verify RPC data.
 
-Without either selector, capture still uses `latest`. `--block` retains its tag
+Without a block selector, capture still uses `latest`. `--block` retains its tag
 and integer semantics: even a 64-digit hexadecimal value is a **block number**,
 never inferred to be a hash. Hash selection works with `--strict-checksum`,
 `--rpc`/the RPC environment variable and the request timeout. Snapshot v1 and
 JSON diff v1 remain unchanged: the saved block has lowercase `number` and `hash`,
 with no extra selection fields. See the [block selection contract](docs/PROTOCOL.md#block-selection).
+
+Use `--depth N` instead of `--block`/`--block-hash` to choose a height relative
+to the first mined `latest` header observed after the expected-chain check.
+The target is **initial latest height minus N**, using exact `BigInt` arithmetic.
+For a head at height 100, depth 0 selects 100, depth 1 selects 99, and depth 100
+selects genesis (0). Depth is a block distance, not an inclusive count of
+confirmations. The target is fixed even if the head advances during capture.
+
+`N` must be `0` or decimal digits beginning with `1`–`9`, with no sign, whitespace,
+leading zeros, exponent, fraction or hex prefix. Its maximum is `2^256-1` and its
+length is at most 78 digits. Invalid values give `DEPTH`. Repeated/missing values,
+`--depth=1`, and any combination with an explicit `--block` or `--block-hash`
+give `USAGE`, before RPC or file creation. These errors use the same safe stderr
+and exit-1 policy. The option is only accepted by `snapshot`.
+
+If the depth exceeds the observed head height, capture fails with
+`DEPTH_UNDERFLOW`; it does not clamp to genesis or wait for more blocks. Depth 0
+reuses the first head's hash. Positive depth fetches the exact computed height
+once. State reads then use that target hash with `requireCanonical: true`, and
+the final block/chain checks still apply. No retry or replacement target is
+selected after an error or reorg. Depth does not prove finality, block ancestry,
+or honesty of the RPC. Old state can be pruned or require an archive provider.
+Depth selection preserves snapshot/diff v1 and works with the existing RPC,
+timeout and strict-checksum options.
 
 By default, address validation checks length and hex syntax; any letter casing
 is accepted. Add `--strict-checksum` to `snapshot` to require the exact
@@ -250,10 +275,19 @@ atomically on filesystems supporting same-directory hard links and use mode
 
 Limits are 1 MiB per HTTP response, 16 KiB of HTTP headers, 128 KiB of target code,
 and 512 KiB per snapshot input. Redirects and compressed responses are rejected.
-There are eight sequential read requests for a successful tag/number capture,
-or nine with `--block-hash` (the extra initial canonical check). There are no
-retries or background loop. A capture can therefore take up to eight or nine
-request timeouts respectively. Block lookups request transaction hashes only,
+Successful captures have these bounded sequential RPC budgets, where `T` is
+`--timeout-ms` (10 seconds by default):
+
+| Selection | Requests | Maximum sum of request timeouts |
+| --- | --- | --- |
+| Default / `--block` tag or number | 8 | `8 × T` |
+| `--block-hash` | 9 | `9 × T` |
+| `--depth 0` | 8 | `8 × T` |
+| `--depth N` with `N > 0` | 9 | `9 × T` |
+
+There are no retries or background loop. Depth underflow stops after the chain
+check and initial head lookup (two requests). Local file work is outside this
+RPC timeout budget. Block lookups request transaction hashes only,
 not full transaction objects; the same 1 MiB response limit applies to them.
 The RPC allowlist contains only chain, block, code, and storage reads; no wallet,
 signing, transaction submission, or `eth_call` is used in this version.

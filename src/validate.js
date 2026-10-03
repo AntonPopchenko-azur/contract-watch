@@ -42,6 +42,13 @@ export function blockHash(value) {
   return value.toLowerCase();
 }
 
+export function depth(value) {
+  if (typeof value !== 'string' || value.length > 78 || !/^(?:0|[1-9][0-9]*)$/.test(value)) fail('DEPTH');
+  const number = BigInt(value);
+  if (number > MAX_UINT256) fail('DEPTH');
+  return number;
+}
+
 export function quantity(value) {
   if (typeof value !== 'string' || !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$/.test(value)) fail('RPC_DATA');
   return value.toLowerCase();

@@ -60,12 +60,13 @@ requests/persistence, default compatibility and offline inspect/diff behavior.
 The input must be `0x` followed by exactly 64 ASCII hex digits; uppercase/mixed
 hex letters are accepted and normalized to lowercase. Syntax failures give
 `BLOCK_HASH` before RPC construction or file creation. The prefix remains `0x`.
-The flag takes exactly one value and cannot be repeated or combined with any
-explicit `--block`, even `latest`. Conflicts, missing values, equals-style
-arguments and use on `inspect`/`diff` give `USAGE`, with no RPC/file side effects.
+The flag takes exactly one value and cannot be repeated or combined with
+`--depth` or any explicit `--block`, even `latest`. Conflicts, missing values,
+equals-style arguments and use on `inspect`/`diff` give `USAGE`, with no RPC/file
+side effects.
 
-Without a hash, the existing `--block` behavior is preserved: latest by default,
-safe/finalized tags, or decimal/hex numbers up to 256 bits. A 64-digit hex value
+Without a hash or depth, the existing `--block` behavior is preserved: latest
+by default, safe/finalized tags, or decimal/hex numbers up to 256 bits. A 64-digit hex value
 passed via `--block` is still a number. No selector is inferred from string
 length. Hash selection composes with the existing target checksum and RPC options.
 
@@ -77,6 +78,36 @@ Only the validated block number and hash are retained. All block lookup
 responses remain subject to the existing 1 MiB cap. Snapshot v1 stores the same
 lowercase `block.number` and `block.hash`; no schema or offline report changes
 are needed.
+
+### Depth selection
+
+`snapshot --depth N` fixes a target at `initialLatestHeight - N`. The reference
+height comes from the first `eth_getBlockByNumber` call with `['latest', false]`
+after checking the expected chain ID. Depth 0 means that same observed head,
+depth 1 means the preceding height, and depth equal to the head height means
+genesis. This is a distance in blocks, not an inclusive confirmation count.
+
+Before RPC construction, validate `N` as a string of at most 78 ASCII decimal
+digits, matching `0` or a nonzero digit followed by digits, with value at most
+`2^256-1`. Leading zeros, signs, whitespace, decimal points, exponents and hex
+input are rejected with `DEPTH`. Parsing and subtraction use `BigInt` only.
+Depth cannot be combined with any explicit `--block` or `--block-hash`.
+Duplicates, conflicts, missing/empty values, equals-style options and other
+commands give `USAGE`. Invalid inputs cause no RPC or file operations.
+
+The initial head must contain a valid mined number and 32-byte hash. If N exceeds
+its height, fail with `DEPTH_UNDERFLOW` after two RPC calls; do not clamp, retry
+or wait. At depth 0 reuse this header. At positive depth fetch the target once
+using its exact minimal hex number and `false`, and require the returned number
+to match. Null latest/target headers give `BLOCK_UNAVAILABLE`; malformed headers
+or a mismatched target number give `RPC_DATA`.
+
+All state reads use the selected target's hash and `requireCanonical: true`.
+The existing final canonical-block and chain checks apply. Never fetch another
+`latest`, recompute the target, change selectors or fall back after an error.
+The snapshot stores only its existing v1 block number/hash, without depth/head
+metadata. This does not prove finality, ancestry back to the initial head, or
+RPC honesty. A provider may have pruned the selected state.
 
 ## RPC sequence
 
@@ -93,11 +124,13 @@ are needed.
    number and `false` checks canonicality **before state reads**. A missing
    canonical header gives `BLOCK_UNAVAILABLE`, malformed data/wrong number gives
    `RPC_DATA`, and a different valid hash gives `BLOCK_NOT_CANONICAL`.
+   In depth mode, first resolve `latest`, check underflow, then resolve the
+   computed number for positive depth as described above; depth 0 reuses latest.
 4. `eth_getCode` reads target code using the resolved hash selector.
 5. Three `eth_getStorageAt` calls read implementation, admin, and beacon using
    that identical selector: `{ "blockHash": "0x…", "requireCanonical": true }`.
 6. `eth_getBlockByNumber` at the resolved number verifies the same hash is still
-   canonical in both selection modes, and `eth_chainId` is checked again.
+   canonical in every selection mode, and `eth_chainId` is checked again.
    A different number/hash on this final check gives `BLOCK_CHANGED`; missing
    or malformed metadata still fails. A changed chain gives `CHAIN_MISMATCH`.
 7. Only after all checks succeed, save a complete snapshot.
@@ -108,11 +141,13 @@ The final recheck detects a reorg at that point, not permanent finality. An
 unsupported selector, unavailable historical state, or provider error aborts
 capture. No fallback, retry, batch, or write method is used.
 
-A successful tag/number capture makes eight sequential requests; hash selection
-makes nine. At the configured per-request timeout, their RPC time budgets are
-at most eight or nine times that timeout. The only newly allowed RPC method is
-the read-only `eth_getBlockByHash`. Provider errors (including unsupported hash
-lookups, pruned state, noncanonical state or rejected EIP-1898 selectors) remain
+Successful tag/number captures and depth 0 make eight sequential requests;
+hash selection and positive depth make nine. Their sum of request timeouts is
+bounded by eight or nine times the configured per-request timeout, respectively.
+This excludes local file work. Depth underflow stops after two requests; invalid
+options make none. Depth adds no RPC methods: the allowlist remains chain,
+block-by-number/hash, code and storage reads. Provider errors (including
+unsupported hash lookups, pruned state, noncanonical state or rejected EIP-1898 selectors) remain
 fixed `RPC_REMOTE` errors without raw provider content. Any failure aborts
 without saving a snapshot. Checking canonicality twice does not establish
 permanent finality or independently authenticate a provider's block data.

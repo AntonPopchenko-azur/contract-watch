@@ -5,6 +5,8 @@ const messages = {
   CHAIN_ID: 'Chain ID must be a positive decimal or hexadecimal integer of at most 256 bits.',
   BLOCK: 'Block must be latest, safe, finalized, or a nonnegative decimal/hexadecimal integer.',
   BLOCK_HASH: 'Block hash must be 0x followed by exactly 64 hexadecimal digits.',
+  DEPTH: 'Depth must be a canonical unsigned decimal integer from 0 to 2^256-1.',
+  DEPTH_UNDERFLOW: 'Depth exceeds the initial latest block height.',
   RPC_URL: 'RPC URL must use HTTP(S), without embedded credentials or a fragment.',
   TIMEOUT_OPTION: 'Timeout must be an integer from 100 to 60000 milliseconds.',
   RPC_TIMEOUT: 'RPC request exceeded its time limit.',

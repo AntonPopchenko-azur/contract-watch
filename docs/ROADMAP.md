@@ -10,7 +10,8 @@ Item 09 adds an opt-in change exit status on 2026-10-01.
 Item 10 adds offline inspection of saved snapshots on 2026-10-01.
 Item 11 adds opt-in strict EIP-55 target validation on 2026-10-02.
 Item 12 adds explicit canonical block-hash selection on 2026-10-02.
-Items 13–45 have not started.
+Item 13 adds capture at a fixed depth behind the initial latest head on 2026-10-03.
+Items 14–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -67,11 +68,15 @@ There is no worker-owned scheduler or automatic endless backlog.
   headers, missing/noncanonical state, reorgs, chain changes, redaction and no
   file after failure. Existing number/tag semantics, checksum mode and v1
   formats are preserved. Completed 2026-10-02.
+- [x] **13 — Confirmation-depth capture.** Add `snapshot --depth N`, selecting
+  initial latest height minus a canonical decimal uint256 distance with BigInt.
+  Tests cover depth 0/1, genesis, short chains, 256-bit boundaries, a changing
+  head, exact RPC sequences and safe failures without snapshots. Existing
+  selectors, checksum mode, v1 formats and final block/chain checks remain;
+  request budgets and finality limits are documented. Completed 2026-10-03.
 
 ## Planned increments
 
-- [ ] **13 — Confirmation-depth capture.** Resolve a requested depth safely,
-  including short chains and underflow; document finality limits.
 - [ ] **14 — Beacon implementation resolution.** Add a bounded read-only
   `implementation()` call at the same hash and validated ABI return fixtures.
 - [ ] **15 — Resolved implementation code.** Record target implementation code
