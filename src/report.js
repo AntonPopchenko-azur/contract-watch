@@ -66,12 +66,37 @@ export function snapshotReport(snapshot, { beaconResolution } = {}) {
   ].join('\n');
 }
 
+function implementationDetails(value) {
+  if (value.status === 'skipped') return { status: value.status, reason: value.reason };
+  return {
+    status: value.status, via: value.via, address: value.address, code: codeDetails(value.code),
+    ...(value.via === 'beacon' ? { beacon: value.beacon, raw: value.raw } : {})
+  };
+}
+
+function implementationDiff(before, after) {
+  const comparison = before.status === 'skipped' || after.status === 'skipped' ? 'unavailable'
+    : before.via !== after.via || before.beacon !== after.beacon ? 'provenance-changed' : 'comparable';
+  const changes = [];
+  if (comparison === 'comparable') {
+    if (before.address !== after.address) changes.push({ field: 'address', before: before.address, after: after.address });
+    // Compare full observed bytes, including empty code; hashes are display only.
+    if (before.code !== after.code) changes.push({ field: 'code', before: codeDetails(before.code), after: codeDetails(after.code) });
+  }
+  return { comparison, before: implementationDetails(before), after: implementationDetails(after), changes };
+}
+
+function implementationDiffers(before, after) {
+  // Ignore object key order and capture metadata; all fields are strictly validated.
+  return ['status', 'reason', 'via', 'address', 'code', 'beacon', 'raw'].some(key => before[key] !== after[key]);
+}
+
 // This document is independently versioned from the input snapshot schema.
 // Only validated, explicitly selected fields are included; never input paths.
 export function diffDocument(before, after) {
   validateSnapshot(before);
   validateSnapshot(after);
-  if (before.schemaVersion !== 1 || after.schemaVersion !== 1) fail('DIFF_VERSION');
+  if (before.schemaVersion !== after.schemaVersion) fail('DIFF_VERSION');
   if (before.chainId !== after.chainId || before.address !== after.address || before.source !== after.source) fail('INCOMPARABLE');
   if (BigInt(after.block.number) < BigInt(before.block.number)) fail('ORDER');
   const changes = [];
@@ -81,26 +106,29 @@ export function diffDocument(before, after) {
       changes.push({ field: name, before: slotDetails(before.slots[name]), after: slotDetails(after.slots[name]) });
     }
   }
+  const implementation = before.schemaVersion === 2 ? implementationDiff(before.implementation, after.implementation) : undefined;
+  const observedDifference = implementation && implementationDiffers(before.implementation, after.implementation);
   const notices = [];
   if (before.block.number === after.block.number && before.block.hash !== after.block.hash) {
     notices.push('SAME_HEIGHT_DIFFERENT_HASH');
   }
-  if (before.block.hash === after.block.hash && (changes.length || before.block.number !== after.block.number)) {
+  if (before.block.hash === after.block.hash && (changes.length || observedDifference || before.block.number !== after.block.number)) {
     notices.push('INCONSISTENT_BLOCK_DATA');
   }
   return {
-    kind: 'contract-watch-diff', schemaVersion: 1,
+    kind: 'contract-watch-diff', schemaVersion: before.schemaVersion,
     chainId: before.chainId, address: before.address, source: before.source,
     blocks: {
       before: { number: before.block.number, hash: before.block.hash },
       after: { number: after.block.number, hash: after.block.hash }
     },
-    changed: changes.length > 0, changes, notices
+    changed: changes.length > 0 || (implementation?.changes.length ?? 0) > 0, changes, notices,
+    ...(implementation ? { implementation } : {})
   };
 }
 
 export function compare(before, after) {
-  const { changes, notices } = diffDocument(before, after);
+  const { changes, notices, implementation, changed } = diffDocument(before, after);
   const messages = {
     SAME_HEIGHT_DIFFERENT_HASH: 'Same height, different block hashes: possible reorg; this is not evidence of an upgrade.',
     INCONSISTENT_BLOCK_DATA: 'Same block hash has inconsistent data; check the provider or snapshot files.'
@@ -111,19 +139,48 @@ export function compare(before, after) {
       before: change.field === 'code' ? codeSummary(change.before) : slotValue(change.before.raw),
       after: change.field === 'code' ? codeSummary(change.after) : slotValue(change.after.raw)
     })),
-    notices: notices.map(code => messages[code])
+    notices: notices.map(code => messages[code]),
+    ...(implementation ? { implementation, changed } : {})
   };
 }
 
+function implementationEndpoint(value) {
+  if (value.status === 'skipped') return `skipped (${value.reason}); address and code unavailable`;
+  return `${value.status} | ${value.address} via ${value.via}${value.via === 'beacon' ? ` ${value.beacon}` : ''} | ${codeSummary(value.code)}`;
+}
+
+function implementationDiffReport(value) {
+  const lines = [
+    `Implementation before: ${implementationEndpoint(value.before)}`,
+    `Implementation after: ${implementationEndpoint(value.after)}`
+  ];
+  if (value.comparison === 'unavailable') {
+    return [...lines, 'Implementation not compared: one or both observations skipped; missing data is not empty code.'];
+  }
+  if (value.comparison === 'provenance-changed') {
+    return [...lines, 'Implementation not compared: provenance changed (direct/beacon source or beacon address).'];
+  }
+  return [...lines,
+    'Implementation comparison: same provenance; comparing observed addresses and selected implementation bytecode.',
+    ...(value.changes.length ? value.changes.map(change => `Implementation ${change.field}: ${
+      change.field === 'code' ? codeSummary(change.before) : change.before
+    } -> ${change.field === 'code' ? codeSummary(change.after) : change.after}`)
+      : ['No implementation address or code changes observed.'])
+  ];
+}
+
 export function diffReport(before, after) {
-  const { changes, notices } = compare(before, after);
+  const { changes, notices, implementation } = compare(before, after);
   return [
     `Contract Watch diff | chain ${before.chainId} | ${before.address}`,
     `Source: ${before.source}${before.source === 'synthetic' ? ' (demonstration only)' : ''}`,
     `Blocks: ${BigInt(before.block.number)} -> ${BigInt(after.block.number)}`,
     ...notices,
-    ...(changes.length ? changes.map(change => `${change.field}: ${change.before} -> ${change.after}`) : ['No code or EIP-1967 slot changes.']),
+    ...(changes.length ? changes.map(change => `${implementation ? (change.field === 'code' ? 'Target code' : `Slot ${change.field}`) : change.field}: ${change.before} -> ${change.after}`)
+      : [implementation ? 'No target code or EIP-1967 slot changes.' : 'No code or EIP-1967 slot changes.']),
+    ...(implementation ? implementationDiffReport(implementation) : []),
     `Observation: ${observation(after)}`,
+    ...(implementation ? ['Observed differences do not prove an upgrade transaction.'] : []),
     'This comparison is not a contract safety assessment.'
   ].join('\n');
 }

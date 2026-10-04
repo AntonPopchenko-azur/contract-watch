@@ -1,7 +1,7 @@
 # Contract Watch
 
 A small, read-only Node.js CLI for taking EVM contract snapshots and comparing
-code and EIP-1967 implementation, admin, and beacon storage words.
+code, EIP-1967 storage words, and optional saved implementation observations.
 
 **Version 0.1.0 baseline.**
 Source repository: [AntonPopchenko-azur/contract-watch](https://github.com/AntonPopchenko-azur/contract-watch).
@@ -91,13 +91,16 @@ For scripts, add `--json` to get one versioned JSON document on stdout:
 node bin/contract-watch.js diff --json examples/before.json examples/after.json
 ```
 
-The report uses `kind: "contract-watch-diff"` and `schemaVersion: 1`, includes
-the target and both blocks, and provides `changed`, structured `changes`, and
+For two v1 snapshots the report uses `kind: "contract-watch-diff"` and
+`schemaVersion: 1`, includes the target and both blocks, and provides `changed`, structured `changes`, and
 machine-readable `notices`. Chain IDs and block numbers stay strings to preserve
 large integers. It contains no input paths, RPC endpoint, capture timestamps, or
 remote errors. The normal text report is unchanged when `--json` is omitted.
 The flag may appear before, between, or after the two filenames; duplicate or
 unknown flags are rejected. Prefix a filename starting with `--` with `./`.
+Two v2 snapshots produce JSON diff v2 with separate implementation observations
+and changes, as described [below](#compare-saved-implementation-observations).
+Mixed v1/v2 inputs fail with `DIFF_VERSION`; no historical data is inferred.
 
 By default, changed and unchanged comparisons exit **0**, including a comparison
 with a fork/inconsistency notice. On incomparable snapshots, invalid files, or
@@ -108,15 +111,16 @@ check the exit status before parsing stdout. JSON diff is offline and ignores
 
 For automation, `diff --exit-code` distinguishes observed state changes from an
 unchanged comparison. It works with text output and with `--json`; neither
-report changes. The status is based only on `changed` (code or slot changes).
+report changes. The status is based only on `changed`: target code or raw slot
+changes, plus comparable implementation address/code changes for v2 pairs.
 Notices without state changes, such as different hashes at the same height,
 do not produce status 2. Status 2 indicates a completed comparison, not an error
 or proof of an upgrade.
 
 | Diff result | Default | With `--exit-code` |
 | --- | --- | --- |
-| No code/slot changes, with or without notices | `0` | `0` |
-| Code/slot changes, with or without notices | `0` | `2` |
+| `changed: false`, with or without notices | `0` | `0` |
+| `changed: true`, with or without notices | `0` | `2` |
 | Argument, read, validation, ordering, or compatibility error | `1` | `1` |
 
 `--exit-code` is a valueless flag accepted only by `diff`, at most once. Like
@@ -125,7 +129,7 @@ options such as `--rpc` cannot be used with `diff`; `snapshot --exit-code`,
 `--exit-code=2`, and repeated flags are usage errors. Snapshot exit codes remain
 0 for success and 1 for errors.
 
-This shell example captures the status immediately in an `if`/`else`, so it works
+This v1 shell example captures the status immediately in an `if`/`else`, so it works
 under `set -e`. The complete report goes to `diff.json`; parse it only after a
 status of 0 or 2. Avoid `if ! command; then diff_status=$?`, which captures the
 negated status, and avoid a pipeline, whose status may belong to another command.
@@ -335,13 +339,56 @@ Empty code is saved as `status: "no-code"`, `code: "0x"`; nonempty code is
 self-reference. Code presence does not establish proxy behavior or safety.
 
 Offline `inspect` displays target and implementation code separately, including
-provenance, skips and no-code observations. **Diff currently requires two v1
-files.** Any comparison involving v2, including v2 against itself, fails with
-`DIFF_VERSION`, exit 1 and empty stdout in text/JSON modes. New observations
-are never silently discarded. Beacon upgrade comparisons and migration tooling
-remain roadmap items 16 and 17. See the [v2 contract](docs/PROTOCOL.md#file-contract-v2)
+provenance, skips and no-code observations. Diff accepts two v1 or two v2 files;
+mixed versions fail with `DIFF_VERSION`, exit 1 and empty stdout in text/JSON
+modes. Migration tooling remains roadmap item 17. See the [v2 contract](docs/PROTOCOL.md#file-contract-v2)
 and [compatibility and migration plan](docs/MIGRATION.md) before changing a saved
 history or a consumer. Old files need no conversion.
+
+## Compare saved implementation observations
+
+These offline examples compare two synthetic v2 snapshots with unchanged target
+code and raw slots, including the same beacon, but different observed implementation
+addresses and code. Both commands complete with **exit 2**:
+
+```sh
+node bin/contract-watch.js diff --exit-code \
+  examples/beacon-before-v2.json examples/beacon-after-v2.json
+node bin/contract-watch.js diff --json --exit-code \
+  examples/beacon-before-v2.json examples/beacon-after-v2.json
+```
+
+The text shows no target code/slot changes, then the two implementation
+observations and address/code differences. JSON uses `schemaVersion: 2`:
+top-level `changes` still contains only target code/raw slots, while
+`implementation.changes` contains comparable implementation `address` and `code`
+differences. `changed` is true when **either** array is nonempty. Consumers must
+check the output version and use `changed`, rather than only the top-level array.
+
+Implementation addresses and bytes are compared only when both observations
+are available (`observed` or `no-code`) and have the same provenance: both direct
+slot, or both beacon with the same beacon address. A different selected address
+can have different code; this compares the selected implementations, without
+claiming that code at one account mutated. The same address with different code
+is also reported. `no-code` is an actual empty-code observation and can be
+compared with nonempty code. Equal addresses and code produce no implementation
+change; capture timestamps do not affect this comparison.
+
+If either side was skipped, `implementation.comparison` is `unavailable`; if
+both are available but provenance differs, it is `provenance-changed`. Both
+endpoints remain visible, including status, skip reason, source and available
+code fingerprints. These cases yield no implementation change entries and do
+not themselves set `changed`. Target code and raw slot differences still count
+normally; valid availability/provenance transitions often require such changes.
+Two identical skips mean there was no implementation comparison, not that the
+unobserved implementation was unchanged. Missing data is never treated as empty
+code, and a provenance change is not reported as an implementation upgrade.
+
+No RPC requests occur, even when the RPC environment variable is configured.
+Files remain unchanged. Fork and same-hash inconsistency notices also cover v2
+observations; notices alone do not set `changed` or exit 2. A comparison describes
+saved observations, not proof of an upgrade transaction, intermediate history,
+provider honesty or safety. See the [JSON diff v2 contract](docs/PROTOCOL.md#json-diff-contract-version-2).
 
 ## What a snapshot means
 
@@ -403,7 +450,8 @@ calls, wallet, signing or transaction submission are exposed.
   Other proxy patterns may still exist; the tool does not identify every proxy.
 - Beacon resolution and implementation code are opt-in observations. Saved v1
   comparisons cannot detect an implementation change behind an unchanged beacon;
-  v2 inspection is supported, while v2 comparisons are explicitly rejected.
+  v2 compares available observations with the same provenance. Skips and changed
+  provenance are reported explicitly without invented implementation changes.
 - Snapshots compare endpoints in time, so intermediate upgrades can be missed.
   A changed slot does not by itself prove that an upgrade transaction occurred.
   Same-height fork comparisons and inconsistent same-hash data receive notices.

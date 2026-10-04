@@ -28,7 +28,7 @@ const messages = {
   FILE_WRITE: 'Cannot save snapshot. Check the destination directory and permissions.',
   FILE_EXISTS: 'Destination already exists; choose a new snapshot filename.',
   INCOMPARABLE: 'Snapshots must have the same chain ID, address, and source kind.',
-  DIFF_VERSION: 'Comparison currently requires two version 1 snapshots; version 2 observations cannot be ignored.',
+  DIFF_VERSION: 'Snapshots must use the same schema version; missing implementation observations cannot be inferred.',
   ORDER: 'The second snapshot must be at the same or a later block height.',
   INTERNAL: 'Unexpected local failure.'
 };

@@ -23,10 +23,10 @@ Snapshot options:
                       At most 1 call, 100000 gas, min(timeout, 5000 ms), 4 KiB response
   --implementation-code  Save v2 with separate implementation code and address provenance
                       Resolves an eligible beacon with the same call limits
-                      Cannot combine with --resolve-beacon; diff requires v1
+                      Cannot combine with --resolve-beacon
 
 Diff options:
-  --json             Version 1 JSON report on stdout; errors remain on stderr
+  --json             Version 1 or 2 JSON report on stdout, matching the input pair
   --exit-code        Exit 2 for state changes, 0 without changes, 1 for errors
 
 All state reads use one block hash and require EIP-1898 support.
@@ -34,6 +34,8 @@ Choose at most one of --block, --block-hash or --depth. Depth is not finality.
 Output files are never overwritten. Parent directory must already exist.
 Address validation defaults to 20-byte hex syntax; EIP-55 checking is opt-in.
 Diff is offline. Default exit status: 0 success (including changes), 1 error.
+Diff requires matching snapshot versions; v2 compares available implementation observations.
+Skipped observations or changed provenance are shown without inferring code changes.
 Inspect is offline and accepts one snapshot v1 or v2 file, no options; exit 0/1.
 Beacon results are not saved in v1 files. No safety assessment or complete proxy detection.
 `;

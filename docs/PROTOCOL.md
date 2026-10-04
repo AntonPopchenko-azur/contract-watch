@@ -355,12 +355,12 @@ invalid JSON gives `SNAPSHOT`. Writers validate and check serialized byte length
 before creating a temporary file. Atomic/private/no-overwrite behavior applies
 to both versions.
 
-V2 supports offline inspection only. **Every diff involving v2**, including
-mixed versions and v2/v2, fails with `DIFF_VERSION`, exit 1, empty stdout and a
+V2 supports offline inspection and comparisons against another valid v2 file.
+Mixed v1/v2 comparisons fail with `DIFF_VERSION`, exit 1, empty stdout and a
 fixed safe stderr message, with or without `--json`/`--exit-code`. V1/v1 diff
-and the independent JSON diff v1 schema are unchanged. No implementation data
-is silently projected away. See the [migration plan](MIGRATION.md) and its
-synthetic compatibility fixtures. Items 16 and 17 remain separate work.
+and the independent JSON diff v1 schema are unchanged; v2/v2 produces JSON diff
+v2 as specified below. See the [migration plan](MIGRATION.md) and its synthetic
+compatibility fixtures. Migration tooling remains separate item 17.
 
 ## Offline inspection
 
@@ -399,14 +399,18 @@ requires filesystem hard-link support; it does not promise directory durability
 after sudden power loss. Readers accept regular files and cap actual bytes read,
 including when a file grows after opening.
 
-Diff first requires two v1 files, then checks identity/source compatibility and
-nondecreasing block height. It compares full bytecode and all three raw words.
+Diff first requires two strictly valid snapshots of the same version, then
+checks identity/source compatibility and nondecreasing block height. It compares
+full bytecode and all three raw words.
 Code is rendered as byte length
 and SHA-256 of decoded bytes; this fingerprint is not an EVM code hash. Local
 capture time and a later block alone are not contract changes. Equal heights with
 different hashes receive a possible-reorg notice. Equal hashes with different
 content or heights receive an inconsistent-data notice. Neither notice proves
 an upgrade or provides a safety judgment.
+For v2 pairs, implementation observations are compared separately with the
+availability/provenance policy below. Diff reads only local files, ignores RPC
+configuration and does not modify inputs or fetch missing historical data.
 
 ## JSON diff contract, version 1
 
@@ -418,7 +422,8 @@ may also follow or appear between the filenames; repeated/unknown options are
 usage errors. Use `./` for filenames starting with `--`.
 
 This output schema is independent of the input snapshot schema and package
-version. Consumers must check `kind` and `schemaVersion` before processing. All
+version. Two v1 snapshots select JSON diff v1; two v2 snapshots select JSON diff
+v2. Consumers must check `kind` and `schemaVersion` before processing. All
 fields below are always present in version 1. Existing field types, meanings and
 enum values are stable; incompatible changes require a new schema version.
 Consumers may ignore future extra object fields. Object key order is not a
@@ -504,9 +509,98 @@ Notices alone never trigger 2. Errors still exit **1**, even with this flag.
 `--exit-code` is accepted once, only by `diff`, with no value, and can be combined
 with `--json` in any position among the filenames. Duplicate or incompatible
 flags give `USAGE` before reading files. Both text and JSON reports are identical
-with and without this option. JSON diff remains version 1 and accepts only v1
-snapshots. See the
+with and without this option. This JSON diff version accepts only v1 snapshots.
+See the
 [README shell example](../README.md) for handling status 2 safely under `set -e`.
+
+## JSON diff contract, version 2
+
+Two valid v2 snapshots produce `kind: "contract-watch-diff"`, `schemaVersion: 2`.
+Both still need the same chain ID, target address and source kind, with the
+earlier or equal-height block first. Validation precedes reporting, so unsupported
+fields/versions and malformed provenance fail with `SNAPSHOT`; mixed valid v1/v2
+fails with `DIFF_VERSION`; identity/source mismatch gives `INCOMPARABLE` and
+decreasing height gives `ORDER`. These remain exit 1, empty stdout and fixed safe
+stderr, even with both flags. There is no network access, input rewrite, schema
+coercion or partial JSON. Existing file/code bounds and snapshot schemas remain.
+
+V2 has all the top-level v1 diff keys plus `implementation`. `chainId`, `address`,
+`source`, `blocks` and top-level `changes` retain their v1 representations.
+Top-level `changes` contains target code and raw slot changes only, in the same
+order (`code`, `implementation`, `admin`, `beacon`); the `implementation` change
+field here means the raw **slot**, not the separate observation object.
+
+The required top-level `implementation` object has exactly these current fields:
+
+| Field | Meaning |
+| --- | --- |
+| `comparison` | `comparable`, `unavailable`, or `provenance-changed` |
+| `before`, `after` | The sanitized saved observations described below, always present |
+| `changes` | Comparable changes only, ordered `address`, then `code`; otherwise empty |
+
+An endpoint with `status: "skipped"` has only `status` and its validated `reason`.
+It has no address/code field, including no invented `null` or zero-byte code.
+Other endpoints have `status` (`observed`/`no-code`), `via`, `address`, and `code`.
+Beacon endpoints additionally have `beacon` and `raw`, retaining the validated
+canonical ABI return word. These fields retain snapshot v2 meanings, except
+`code` is a `{bytes, sha256}` summary with the same decoded-byte SHA-256 contract
+as diff v1. The empty code summary is zero bytes and SHA-256 of empty bytes;
+only `no-code` endpoints carry it. No raw bytecode, timestamps, paths, endpoint
+URLs, provider messages or arbitrary input fields are emitted.
+
+Determine comparison eligibility in this order:
+
+1. Either endpoint is skipped: `unavailable`, with an empty implementation
+   changes array, even when skip reasons differ or one endpoint is available.
+2. Both are available, but `via` differs or their beacon addresses differ:
+   `provenance-changed`, also with no implementation changes.
+3. Otherwise: `comparable`. Direct observations share the direct slot provenance;
+   beacon observations must have the same beacon address. Compare addresses and
+   full code bytes exactly, independent of their lengths or fingerprints.
+
+An address difference produces `{field: "address", before: ADDRESS, after: ADDRESS}`.
+A byte difference produces `{field: "code", before: SUMMARY, after: SUMMARY}`.
+When selected addresses differ but provenance is stable, code differences
+describe the two selected implementations, not mutation of one account's code.
+The same address with different code is comparable. Empty/nonempty transitions
+are real code differences (`no-code` ↔ `observed`). An address can change while
+code remains equal, including two observed empty code results. The retained raw
+beacon word is fully determined by its validated address, not an independent
+third implementation change.
+
+**`changed` is true exactly when top-level `changes` or `implementation.changes`
+is nonempty.** Status, skip reason and provenance transitions are visible through
+the endpoints and `comparison`; they do not independently set `changed`. Strict
+snapshot validation derives skips/provenance from target code and slots, so a
+valid transition may necessarily include target changes, which still count.
+Same skips do not establish unchanged implementation state. Skipped data is not
+empty code, and switching direct/beacon or beacon addresses cannot by itself
+establish an implementation upgrade. A `no-code` status transition does entail
+a compared code change when provenance remains comparable.
+
+V2 retains the two existing notice codes:
+
+- `SAME_HEIGHT_DIFFERENT_HASH`: same height and different hashes, irrespective of
+  target/implementation differences. Possible reorg; not proof of an upgrade.
+- `INCONSISTENT_BLOCK_DATA`: same hash with different heights, target code/raw
+  slots, or any saved implementation observation field (status, reason, via,
+  address, full code, beacon, raw). Object key order and capture timestamps do
+  not count. This also covers observation availability/provenance contradictions.
+
+These conditions are mutually exclusive; notice order and meanings for v1 are
+unchanged. Notices never directly change `changed`. Default successful exit is
+0, while `--exit-code` returns 2 iff `changed` is true, otherwise 0. Both flags
+preserve these semantics and do not alter the report. Error exit is always 1.
+
+Text output separately labels target/slot changes and displays both implementation
+endpoints. It reports compared address/code differences or why comparison was
+unavailable. It does not claim that saved differences prove an upgrade transaction
+or safety. The [synthetic before](../examples/beacon-before-v2.json) and
+[after](../examples/beacon-after-v2.json) keep target code and beacon-slot fixed
+while changing the returned address and implementation code. Independent
+[JSON](../test/fixtures/json-diff-v2/beacon-change.json) and
+[text](../test/fixtures/json-diff-v2/beacon-change.txt) fixtures pin the expected
+output. Fixture capture timestamps are their actual generation times.
 
 ## Error categories
 
@@ -521,7 +615,7 @@ snapshots. See the
 | `BLOCK_UNAVAILABLE`, `BLOCK_CHANGED` | Select an available block or capture again after a reorg |
 | `FILE_READ`, `FILE_WRITE`, `FILE_EXISTS` | Use a valid local path and a new filename |
 | `SNAPSHOT`, `INCOMPARABLE`, `ORDER` | Check schema, target identity, source and comparison order |
-| `DIFF_VERSION` | Diff currently accepts two v1 snapshots only; inspect v2 individually |
+| `DIFF_VERSION` | Use two snapshots of the same version; missing v1 observations cannot be inferred |
 | `INTERNAL` | Unexpected local failure; reproduce with a synthetic fixture |
 
 The public error boundary emits fixed messages only. HTTP and JSON-RPC remote

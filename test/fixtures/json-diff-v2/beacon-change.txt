@@ -1,0 +1,12 @@
+Contract Watch diff | chain 1 | 0x1111111111111111111111111111111111111111
+Source: synthetic (demonstration only)
+Blocks: 100 -> 101
+No target code or EIP-1967 slot changes.
+Implementation before: observed | 0x2222222222222222222222222222222222222222 via beacon 0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb | 4 bytes, SHA-256 5216838b8fb8c54530d3584009ad08ede545355966b47066ad9f5e8cdd55cbe8
+Implementation after: observed | 0x3333333333333333333333333333333333333333 via beacon 0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb | 4 bytes, SHA-256 c882a41ec757e4fcb259992f7448b4180283e38f63c6b5679bf23949d788d036
+Implementation comparison: same provenance; comparing observed addresses and selected implementation bytecode.
+Implementation address: 0x2222222222222222222222222222222222222222 -> 0x3333333333333333333333333333333333333333
+Implementation code: 4 bytes, SHA-256 5216838b8fb8c54530d3584009ad08ede545355966b47066ad9f5e8cdd55cbe8 -> 4 bytes, SHA-256 c882a41ec757e4fcb259992f7448b4180283e38f63c6b5679bf23949d788d036
+Observation: Beacon implementation() address observed; proxy behavior unverified.
+Observed differences do not prove an upgrade transaction.
+This comparison is not a contract safety assessment.

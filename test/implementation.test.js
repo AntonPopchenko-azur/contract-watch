@@ -291,7 +291,7 @@ test('new flag rejects invalid options before network or file creation', async t
   assert.deepEqual(await readdir(dir), []);
 });
 
-test('committed format fixtures read offline; v2 comparisons never silently discard observations', async t => {
+test('committed format fixtures read offline; mixed comparisons never invent observations', async t => {
   const dir = await temporaryDirectory(t);
   const paths = [];
   for (const name of ['v1', 'direct-v2', 'beacon-v2', 'no-code-v2', 'skipped-v2']) {
@@ -301,12 +301,13 @@ test('committed format fixtures read offline; v2 comparisons never silently disc
     await saveSnapshot(path, snapshot);
     assert.equal((await cli(['inspect', path])).code, 0);
   }
-  for (const [before, after] of [[paths[0], paths[1]], [paths[1], paths[0]], [paths[1], paths[1]], [paths[2], paths[3]]]) {
+  for (const [before, after] of [[paths[0], paths[1]], [paths[1], paths[0]]]) {
     for (const flags of [[], ['--json'], ['--exit-code'], ['--json', '--exit-code']]) {
       failure(await cli(['diff', ...flags, before, after]), 'DIFF_VERSION');
     }
   }
-  assert.throws(() => diffDocument(v2(), v2()), { code: 'DIFF_VERSION' });
+  assert.equal(diffDocument(v2(), v2()).changed, false);
+  assert.equal(diffDocument(v2(), v2()).schemaVersion, 2);
   const good = v2(); good.implementation.code = 'SENSITIVE_TEST_BAD';
   await writeFile(paths[1], JSON.stringify(good));
   failure(await cli(['inspect', paths[1]]), 'SNAPSHOT');

@@ -50,9 +50,11 @@ GitHub release page. Never replace an existing published tag.
   checks for both versions. Its dedicated beacon
   implementation() call is hash-pinned, limited to 100000 gas, 4 KiB and at most
   5 seconds, with no generic eth_call access. Both code blobs are bounded at
-  128 KiB each; files at 512 KiB for v1 and 768 KiB for v2. Diff rejects every v2
-  input until comparisons are implemented explicitly. Upgrade comparisons and
-  migration tooling remain separate work; follow docs/MIGRATION.md.
+  128 KiB each; files at 512 KiB for v1 and 768 KiB for v2. Diff requires matching
+  snapshot versions: preserve v1 output; v2 uses JSON diff v2 and separately
+  compares available implementation observations with the same provenance.
+  Skips/provenance changes must not fabricate address/code changes. Mixed versions
+  remain DIFF_VERSION errors. Migration tooling is separate; follow docs/MIGRATION.md.
 - For each functional change, add meaningful regression/protocol/file tests and
   document user-visible behavior. Run `npm test` and `npm run demo` as appropriate.
   Tests use local fake RPC and temporary directories, without keys or external

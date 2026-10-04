@@ -13,7 +13,7 @@ fixed diagnostic text now names both supported versions and their size limits.
 | Existing v1 capture modes | Writes v1 | Never writes v2 |
 | `--implementation-code` | Never silently substitutes v1 | Writes v2 |
 | Current `inspect` | Supported, existing report | Supported, separate code/provenance |
-| Current `diff`, text or JSON | Two v1 inputs supported | Any v2 input gives `DIFF_VERSION` |
+| Current `diff`, text or JSON | Two v1 inputs yield diff v1 | Two v2 inputs yield diff v2; mixed inputs give `DIFF_VERSION` |
 | Earlier v1-only readers | Supported | Reject as unsupported |
 
 Keep existing history as v1 and retain originals. No automatic conversion,
@@ -32,14 +32,28 @@ old file. Do not copy the old timestamp, invent missing results, merge data from
 different blocks/providers or silently replace the old snapshot. If recapture
 fails, retain v1; there is no fallback to latest or to an invented v2 observation.
 
-Future item 16 must explicitly define implementation-aware comparisons,
-including provenance, skips, no-code and mixed-version policy before accepting
-v2 in diff. Item 17 must define an explicit offline migration operation with
+Item 16 adds implementation-aware comparisons for two v2 snapshots. The output
+is explicitly JSON diff v2; consumers must select by `kind` and `schemaVersion`.
+Unlike diff v1, `changed` considers both top-level target/slot `changes` and the
+separate `implementation.changes` array. Both implementation observations are
+retained in summarized form, with `comparison` marking comparable, unavailable
+or changed provenance. Only available observations sharing direct-slot provenance
+or the same beacon address get address/code change entries. Skips or changed
+provenance do not invent code differences. V1 JSON/text output, notice codes and
+exit policy remain unchanged. The earlier item 15 prohibition on all v2 diffs
+is replaced by the documented [v2 comparison contract](PROTOCOL.md#json-diff-contract-version-2).
+
+Mixed-version pairs still fail safely with `DIFF_VERSION`, in both directions
+and all output/exit modes. Its fixed diagnostic now describes the same-version
+requirement. There is no flag to discard v2 fields or infer missing v1 data.
+No existing snapshot or JSON diff file is rewritten as part of this change.
+
+Item 17 must define an explicit offline migration operation with
 backup/no-overwrite behavior, output version negotiation, fixtures and handling
 of unavailable observations. V2 currently has no `unknown historical data`
 state, so a universal offline v1-to-v2 conversion is not defined. That work may
 need another format version rather than fabricating observations or weakening
-v2 validation. Neither item is implemented or marked complete by item 15.
+v2 validation. Migration tooling is not implemented by item 16.
 
 Compatibility specimens under [test/fixtures/implementation](../test/fixtures/implementation/)
 are synthetic, created for these tests; their addresses, hashes and code are
@@ -49,6 +63,10 @@ invented and their timestamps record fixture generation. They include unchanged
 [beacon v2](../test/fixtures/implementation/beacon-v2.json),
 [no-code v2](../test/fixtures/implementation/no-code-v2.json) and
 [skipped v2](../test/fixtures/implementation/skipped-v2.json). Tests verify strict
-read/inspect, invalid provenance, mixed/v2 diff rejection, independent code
+read/inspect, invalid provenance, mixed-version diff rejection, independent code
 limits, per-version file limits and private atomic no-overwrite persistence.
 Existing v1 examples and golden diff output remain unchanged.
+The new [before](../examples/beacon-before-v2.json)/[after](../examples/beacon-after-v2.json)
+pair and [v2 diff fixtures](../test/fixtures/json-diff-v2/) are also synthetic,
+generated on 2026-10-04. They demonstrate a changed implementation behind an
+unchanged beacon, without treating the report as proof of an upgrade transaction.

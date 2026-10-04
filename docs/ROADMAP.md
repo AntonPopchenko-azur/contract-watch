@@ -13,7 +13,8 @@ Item 12 adds explicit canonical block-hash selection on 2026-10-02.
 Item 13 adds capture at a fixed depth behind the initial latest head on 2026-10-03.
 Item 14 adds opt-in live beacon implementation observations on 2026-10-03.
 Item 15 adds separate implementation code observations in opt-in v2 on 2026-10-04.
-Items 16–45 have not started.
+Item 16 adds offline v2 implementation comparisons on 2026-10-04.
+Items 17–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -91,11 +92,18 @@ There is no worker-owned scheduler or automatic endless backlog.
   V1 remains supported; inspect reads v2 and diff explicitly rejects v2 until
   item 16. Document the compatibility/migration plan without inventing missing
   historical data or adding migration tooling. Completed 2026-10-04.
+- [x] **16 — Beacon upgrade comparisons.** Compare two saved v2 observations
+  offline, including changed implementation address/code behind an unchanged
+  beacon. JSON diff v2 keeps target/slot changes separate from implementation
+  changes and reports unavailable or changed-provenance observations explicitly.
+  Tests cover no-code/skips, source transitions, fork/inconsistency notices,
+  exact integers, safe errors, no network/input writes and text/JSON exit policy.
+  V1 output remains unchanged; mixed versions still fail with DIFF_VERSION.
+  Synthetic examples and independent expected reports document the contract;
+  migration tooling remains item 17. Completed 2026-10-04.
 
 ## Planned increments
 
-- [ ] **16 — Beacon upgrade comparisons.** Report implementation changes behind
-  an unchanged beacon using upgraded fixtures and honest observation labels.
 - [ ] **17 — Snapshot migration tooling.** Supply explicit offline migration for
   new schema versions, backup behavior and old-version compatibility fixtures.
 - [ ] **18 — Chain genesis identity.** Optionally bind snapshots to genesis hash
