@@ -248,10 +248,12 @@ that property is not tested by one call.
 
 No resolution field is added under snapshot schemaVersion 1. Existing strict
 unknown-field checks, private atomic writes and offline v1 inspect/diff stay
-unchanged. Offline reports have no live response to reproduce; JSON diff v1
+unchanged. Offline v1 reports have no live response to reproduce; JSON diff v1
 continues comparing only code and raw slots. It cannot detect an implementation
 change behind an unchanged beacon. The separate v2 mode below persists these
-observations; beacon upgrade diffs and migration tooling remain deferred.
+observations and compares two v2 snapshots using
+[JSON diff v2](#json-diff-contract-version-2). Migration tooling remains deferred
+to roadmap item 17.
 
 ## File contract v1
 
