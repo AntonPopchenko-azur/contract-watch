@@ -10,8 +10,8 @@ import { cli, fakeRpc, temporaryDirectory, fixture, ROOT } from './helpers/fake-
 const execute = promisify(execFile);
 const errors = {
   USAGE: 'Error [USAGE]: Invalid command or options. Run contract-watch --help.\n',
-  SNAPSHOT: 'Error [SNAPSHOT]: Invalid or unsupported snapshot; expected the documented version 1 format.\n',
-  FILE_READ: 'Error [FILE_READ]: Cannot read snapshot as a regular file (maximum 512 KiB).\n'
+  SNAPSHOT: 'Error [SNAPSHOT]: Invalid or unsupported snapshot; expected the documented version 1 or 2 format.\n',
+  FILE_READ: 'Error [FILE_READ]: Cannot read snapshot as a regular file (maximum 512 KiB for v1, 768 KiB for v2).\n'
 };
 
 function assertFailure(result, code) {
@@ -92,7 +92,7 @@ test('inspect rejects corrupt JSON and unsupported/malformed v1 files without ex
     ['broken JSON', '{PRIVATE_JSON_SECRET'], ['null', 'null'], ['array', '[]']
   ];
   for (const [name, mutate] of [
-    ['future version', value => { value.schemaVersion = 2; }],
+    ['future version', value => { value.schemaVersion = 3; }],
     ['legacy version', value => { value.schemaVersion = 0; }],
     ['string version', value => { value.schemaVersion = '1'; }],
     ['missing version', value => { delete value.schemaVersion; }],

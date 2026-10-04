@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { address, chainId, blockTag, blockHash, depth, quantity, data } from './validate.js';
 import { fail } from './errors.js';
 import { createRpc } from './rpc.js';
-import { resolveBeacon } from './beacon.js';
+import { resolveBeacon, decodeBeaconResult } from './beacon.js';
+import { captureImplementation, implementationSelection } from './implementation.js';
 
 // https://eips.ethereum.org/EIPS/eip-1967
 export const SLOTS = Object.freeze({
@@ -15,6 +16,8 @@ export const SLOTS = Object.freeze({
 });
 export const ZERO_WORD = `0x${'0'.repeat(64)}`;
 export const MAX_SNAPSHOT_BYTES = 512 * 1024;
+export const MAX_SNAPSHOT_V2_BYTES = 768 * 1024;
+const fileLimit = version => version === 2 ? MAX_SNAPSHOT_V2_BYTES : MAX_SNAPSHOT_BYTES;
 
 function blockHeader(value) {
   if (value === null) fail('BLOCK_UNAVAILABLE');
@@ -32,10 +35,14 @@ export async function captureWithBeacon(options) {
   return captureObservation(options, true);
 }
 
+export async function captureWithImplementation(options) {
+  return (await captureObservation(options, false, true)).snapshot;
+}
+
 async function captureObservation({
   rpcUrl, address: inputAddress, chainId: expectedChain,
   block, blockHash: inputHash, depth: inputDepth, timeoutMs = 10000, strictChecksum = false
-}, includeBeacon) {
+}, includeBeacon, includeImplementation = false) {
   if ([block, inputHash, inputDepth].filter(value => value !== undefined).length > 1) fail('USAGE');
   const target = address(inputAddress, { strictChecksum });
   const expected = chainId(expectedChain);
@@ -71,13 +78,16 @@ async function captureObservation({
     slots[name] = data(await rpc('eth_getStorageAt', [target, position, selector]), 32);
   }
   const beaconResolution = includeBeacon ? await resolveBeacon(rpc, target, code, slots, pinned.hash) : undefined;
+  const implementation = includeImplementation
+    ? await captureImplementation(rpc, target, code, slots, pinned.hash) : undefined;
   // A late reorg cannot mix state (all reads use a hash); detect canonical changes too.
   const confirmed = blockHeader(await rpc('eth_getBlockByNumber', [pinned.number, false]));
   if (confirmed.number !== pinned.number || confirmed.hash !== pinned.hash) fail('BLOCK_CHANGED');
   if (BigInt(quantity(await rpc('eth_chainId'))).toString() !== expected) fail('CHAIN_MISMATCH');
   const snapshot = {
-    schemaVersion: 1, source: 'rpc', capturedAt: new Date().toISOString(),
-    chainId: expected, address: target, block: pinned, code, slots
+    schemaVersion: includeImplementation ? 2 : 1, source: 'rpc', capturedAt: new Date().toISOString(),
+    chainId: expected, address: target, block: pinned, code, slots,
+    ...(includeImplementation ? { implementation } : {})
   };
   return { snapshot, beaconResolution };
 }
@@ -89,10 +99,11 @@ function keys(value, expected) {
 
 export function validateSnapshot(value) {
   try {
-    keys(value, ['schemaVersion', 'source', 'capturedAt', 'chainId', 'address', 'block', 'code', 'slots']);
+    keys(value, ['schemaVersion', 'source', 'capturedAt', 'chainId', 'address', 'block', 'code', 'slots',
+      ...(value?.schemaVersion === 2 ? ['implementation'] : [])]);
     keys(value.block, ['number', 'hash']);
     keys(value.slots, Object.keys(SLOTS));
-    if (value.schemaVersion !== 1 || !['rpc', 'synthetic'].includes(value.source) ||
+    if (![1, 2].includes(value.schemaVersion) || !['rpc', 'synthetic'].includes(value.source) ||
         typeof value.capturedAt !== 'string' ||
         !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.capturedAt) ||
         new Date(value.capturedAt).toISOString() !== value.capturedAt ||
@@ -102,31 +113,53 @@ export function validateSnapshot(value) {
     for (const name of Object.keys(SLOTS)) {
       if (data(value.slots[name], 32) !== value.slots[name]) fail('SNAPSHOT');
     }
+    if (value.schemaVersion === 2) validateImplementation(value);
     return value;
   } catch { fail('SNAPSHOT'); }
+}
+
+function validateImplementation(snapshot) {
+  const selected = implementationSelection(snapshot.code, snapshot.slots);
+  const observed = snapshot.implementation;
+  if (selected.reason) {
+    keys(observed, ['status', 'reason']);
+    if (observed.status !== 'skipped' || observed.reason !== selected.reason) fail('SNAPSHOT');
+    return;
+  }
+  keys(observed, ['status', 'via', 'address', 'code', ...(selected.via === 'beacon' ? ['beacon', 'raw'] : [])]);
+  if (observed.via !== selected.via || data(observed.code) !== observed.code ||
+      observed.status !== (observed.code === '0x' ? 'no-code' : 'observed')) fail('SNAPSHOT');
+  if (selected.via === 'implementation-slot') {
+    if (observed.address !== selected.address) fail('SNAPSHOT');
+  } else {
+    const decoded = decodeBeaconResult(observed.raw);
+    if (observed.beacon !== selected.beacon || observed.raw !== decoded.raw ||
+        observed.address !== decoded.implementation) fail('SNAPSHOT');
+  }
 }
 
 export async function readSnapshot(path) {
   let file;
   let text;
+  let size = 0;
   try {
     // Nonblocking open prevents special files such as FIFOs from hanging the CLI.
     file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
     const stat = await file.stat();
-    if (!stat.isFile() || stat.size > MAX_SNAPSHOT_BYTES) fail('FILE_READ');
-    const buffer = Buffer.alloc(MAX_SNAPSHOT_BYTES + 1);
-    let size = 0;
+    if (!stat.isFile() || stat.size > MAX_SNAPSHOT_V2_BYTES) fail('FILE_READ');
+    const buffer = Buffer.alloc(MAX_SNAPSHOT_V2_BYTES + 1);
     while (size < buffer.length) {
       const { bytesRead } = await file.read(buffer, size, buffer.length - size, null);
       if (bytesRead === 0) break;
       size += bytesRead;
     }
-    if (size > MAX_SNAPSHOT_BYTES) fail('FILE_READ');
+    if (size > MAX_SNAPSHOT_V2_BYTES) fail('FILE_READ');
     text = buffer.subarray(0, size).toString('utf8');
   } catch { fail('FILE_READ'); }
   finally { await file?.close().catch(() => {}); }
   let parsed;
-  try { parsed = JSON.parse(text); } catch { fail('SNAPSHOT'); }
+  try { parsed = JSON.parse(text); } catch { fail(size > MAX_SNAPSHOT_BYTES ? 'FILE_READ' : 'SNAPSHOT'); }
+  if (size > fileLimit(parsed?.schemaVersion)) fail('FILE_READ');
   return validateSnapshot(parsed);
 }
 
@@ -136,9 +169,11 @@ export async function saveSnapshot(path, snapshot) {
   let file;
   let created = false;
   try {
+    const serialized = `${JSON.stringify(snapshot, null, 2)}\n`;
+    if (Buffer.byteLength(serialized) > fileLimit(snapshot.schemaVersion)) fail('FILE_WRITE');
     file = await open(temporary, 'wx', 0o600);
     created = true;
-    await file.writeFile(`${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+    await file.writeFile(serialized, 'utf8');
     await file.sync();
     await file.close();
     file = undefined;

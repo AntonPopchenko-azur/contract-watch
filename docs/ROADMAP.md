@@ -12,7 +12,8 @@ Item 11 adds opt-in strict EIP-55 target validation on 2026-10-02.
 Item 12 adds explicit canonical block-hash selection on 2026-10-02.
 Item 13 adds capture at a fixed depth behind the initial latest head on 2026-10-03.
 Item 14 adds opt-in live beacon implementation observations on 2026-10-03.
-Items 15–45 have not started.
+Item 15 adds separate implementation code observations in opt-in v2 on 2026-10-04.
+Items 16–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -82,11 +83,17 @@ There is no worker-owned scheduler or automatic endless backlog.
   Loopback/CLI tests cover selectors, budgets, malformed/zero returns, provider
   failures, reorg/chain checks, redaction and atomic persistence. Completed
   2026-10-03.
+- [x] **15 — Resolved implementation code.** Add `--implementation-code` with
+  separate target/implementation bytecode, direct-slot or bounded-beacon address
+  provenance, explicit skip/no-code states and strict snapshot v2 validation.
+  Hash-pinned reads precede final rechecks; tests cover all block modes, code/
+  HTTP/file limits, safe failures, fixtures and private atomic persistence.
+  V1 remains supported; inspect reads v2 and diff explicitly rejects v2 until
+  item 16. Document the compatibility/migration plan without inventing missing
+  historical data or adding migration tooling. Completed 2026-10-04.
 
 ## Planned increments
 
-- [ ] **15 — Resolved implementation code.** Record target implementation code
-  separately, with no-code and oversize tests and a format migration plan.
 - [ ] **16 — Beacon upgrade comparisons.** Report implementation changes behind
   an unchanged beacon using upgraded fixtures and honest observation labels.
 - [ ] **17 — Snapshot migration tooling.** Supply explicit offline migration for

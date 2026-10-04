@@ -44,11 +44,15 @@ GitHub release page. Never replace an existing published tag.
   keys, raw provider errors, arbitrary input strings, or underlying error stacks.
 - Preserve raw words. Empty slots, noncanonical data and ordinary contracts must
   not be converted into claims that a contract is safe or that all proxies are
-  detected. Opt-in beacon resolution is a live observation only; keep snapshot
-  v1 raw storage and strict unknown-field validation unchanged. Its dedicated
+  detected. `--resolve-beacon` remains live-only and writes strict v1.
+  `--implementation-code` explicitly writes v2 with separate implementation code
+  and validated address provenance; preserve raw words and strict unknown-field
+  checks for both versions. Its dedicated beacon
   implementation() call is hash-pinned, limited to 100000 gas, 4 KiB and at most
-  5 seconds, with no generic eth_call access. Implementation bytecode, persisted
-  beacon observations, upgrade comparisons and migration remain separate work.
+  5 seconds, with no generic eth_call access. Both code blobs are bounded at
+  128 KiB each; files at 512 KiB for v1 and 768 KiB for v2. Diff rejects every v2
+  input until comparisons are implemented explicitly. Upgrade comparisons and
+  migration tooling remain separate work; follow docs/MIGRATION.md.
 - For each functional change, add meaningful regression/protocol/file tests and
   document user-visible behavior. Run `npm test` and `npm run demo` as appropriate.
   Tests use local fake RPC and temporary directories, without keys or external

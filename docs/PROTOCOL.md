@@ -1,4 +1,4 @@
-# Protocol and snapshot format, version 1
+# Protocol and snapshot formats
 
 ## Address checksum
 
@@ -131,6 +131,8 @@ RPC honesty. A provider may have pruned the selected state.
    that identical selector: `{ "blockHash": "0x…", "requireCanonical": true }`.
    With `--resolve-beacon`, eligible slot data triggers one bounded `eth_call`
    at this same hash, with strict ABI validation as specified below.
+   With `--implementation-code`, the v2 selection policy below may instead add
+   that call and one `eth_getCode`, or just the direct implementation code read.
 6. `eth_getBlockByNumber` at the resolved number verifies the same hash is still
    canonical in every selection mode, and `eth_chainId` is checked again.
    A different number/hash on this final check gives `BLOCK_CHANGED`; missing
@@ -143,8 +145,8 @@ The final recheck detects a reorg at that point, not permanent finality. An
 unsupported selector, unavailable historical state, or provider error aborts
 capture. No fallback, retry, batch, or write method is used.
 
-Without a beacon call, successful tag/number captures and depth 0 make eight sequential requests;
-hash selection and positive depth make nine. Their sum of request timeouts is
+Before opt-in observations, successful tag/number captures and depth 0 make eight
+sequential requests; hash selection and positive depth make nine. Their sum of request timeouts is
 bounded by eight or nine times the configured per-request timeout, respectively.
 An eligible beacon adds one request with timeout `min(timeoutMs, 5000)`: at most
 9 requests / `8*T + min(T,5000)` ms for tags, numbers and depth 0, or 10 requests /
@@ -248,10 +250,10 @@ No resolution field is added under snapshot schemaVersion 1. Existing strict
 unknown-field checks, private atomic writes and offline v1 inspect/diff stay
 unchanged. Offline reports have no live response to reproduce; JSON diff v1
 continues comparing only code and raw slots. It cannot detect an implementation
-change behind an unchanged beacon. Persisted observations, implementation code,
-beacon upgrade diffs and migration are separate roadmap work.
+change behind an unchanged beacon. The separate v2 mode below persists these
+observations; beacon upgrade diffs and migration tooling remain deferred.
 
-## File contract
+## File contract v1
 
 See [before.json](../examples/before.json) for a complete synthetic specimen.
 Each object has exactly these keys; unknown or missing fields are rejected.
@@ -275,17 +277,103 @@ decoded slot addresses and code fingerprints are computed when reporting, not
 trusted from a file. No endpoint, provider error, key, arbitrary comment, or
 filename is included in the format. `capturedAt` is not the block timestamp.
 
+## File contract v2
+
+Only `snapshot --implementation-code` writes v2. The flag is valueless, accepted
+once, snapshot-only, and mutually exclusive with `--resolve-beacon`. Violations
+give `USAGE` before RPC or file work. The programmatic entry point is
+`captureWithImplementation(options)` returning the snapshot itself. Existing
+`capture` and `captureWithBeacon` retain their v1 contracts.
+
+V2 has exactly the v1 top-level keys plus `implementation`, and `schemaVersion`
+is the JSON number `2`. All common fields retain their representations and
+meaning: `code` always belongs to `address`, never to the implementation.
+Target and implementation bytecode each allow at most 131072 decoded bytes.
+Unknown/missing fields, including on the observation object, are rejected.
+
+After target code and all slots are read, apply these conditions in order:
+
+| Condition | Observation / additional RPC |
+| --- | --- |
+| Target code is `0x` | `skipped`, `NO_TARGET_CODE` / 0 |
+| Any slot has nonzero high 12 bytes, including admin | `skipped`, `NONCANONICAL_SLOT` / 0 |
+| Both implementation and beacon slots are nonzero | `skipped`, `AMBIGUOUS_SLOTS` / 0 |
+| Only implementation slot is nonzero | Direct implementation address / 1 code read |
+| Only beacon slot is nonzero | Beacon return address / 1 bounded call + 1 code read |
+| Both target slots empty, including admin-only evidence | `skipped`, `EMPTY_SLOTS` / 0 |
+
+This policy is deliberately stricter than merely taking slot precedence in
+[EIP-1967](https://eips.ethereum.org/EIPS/eip-1967#beacon-contract-address).
+Every raw slot remains unchanged. Canonical nonzero addresses are only candidate
+implementation observations, not confirmation of delegation behavior.
+
+`implementation` is exactly one of the following shapes:
+
+| Shape | Exact keys and values |
+| --- | --- |
+| Skipped | `status: "skipped"`, `reason`: the matching fixed reason above |
+| Direct | `status`, `via: "implementation-slot"`, `address`, `code` |
+| Beacon | `status`, `via: "beacon"`, `address`, `code`, `beacon`, `raw` |
+
+For direct/beacon observations, `code` is lowercase even-length hex data;
+`status` must be `"no-code"` exactly when code is `"0x"`, otherwise `"observed"`.
+Direct `address` must equal the low 20 bytes of the canonical nonzero
+implementation slot. Beacon `beacon` must match its canonical nonzero slot;
+`raw` must be a lowercase, exactly 32-byte ABI word with zero high 12 bytes and
+a nonzero address; `address` must equal its low 20 bytes. The direct slot must
+be empty for this shape. All addresses use lowercase `0x` plus 40 hex digits.
+Offline validation recomputes eligibility, skip reasons and address consistency
+from the retained raw words; it cannot verify the provider or prove code is real.
+Fingerprints are derived for display, never trusted as saved fields.
+
+The beacon request is identical to the live-only operation above: fixed
+`implementation()` input, target as `from`, zero value, 100000 gas, 4 KiB body
+and deadline `min(T,5000 ms)`. Strict decoding errors remain fatal; a zero ABI
+address is not a no-code observation. Only a valid address with an empty
+`eth_getCode` result gets `no-code`.
+
+The extra code request uses `[observedAddress, {blockHash, requireCanonical:true}]`
+with the original hash, as specified for `eth_getCode` by
+[EIP-1898](https://eips.ethereum.org/EIPS/eip-1898). Its ordinary 1 MiB HTTP body,
+16 KiB header and `T` deadline limits remain. There is no arbitrary call, retry,
+selector fallback, recursion or implementation storage lookup. A self-reference
+still receives exactly one additional code read. All additional reads precede
+the final canonical-block and chain checks; failures produce no new file and
+no partial success output.
+
+Starting from the base 8 requests (tag/number/depth 0) or 9 (hash/positive depth),
+direct code adds 1 request / `T`, beacon code adds 2 / `T + min(T,5000)`, and
+skips add none. Maximum successful capture: 11 requests and a sum of deadlines
+`10*T + min(T,5000)` ms, excluding local work. Tests use loopback RPC only.
+
+V1 files remain capped at 512 KiB; v2 files at 768 KiB, counting actual UTF-8
+bytes including whitespace. Both maximum-size code blobs fit in a normal v2
+serialization. The reader first caps allocation/actual reads at 768 KiB plus
+one sentinel byte, then enforces the parsed version's limit (unknown versions
+use the v1 limit). Invalid JSON exceeding 512 KiB gives `FILE_READ`; smaller
+invalid JSON gives `SNAPSHOT`. Writers validate and check serialized byte length
+before creating a temporary file. Atomic/private/no-overwrite behavior applies
+to both versions.
+
+V2 supports offline inspection only. **Every diff involving v2**, including
+mixed versions and v2/v2, fails with `DIFF_VERSION`, exit 1, empty stdout and a
+fixed safe stderr message, with or without `--json`/`--exit-code`. V1/v1 diff
+and the independent JSON diff v1 schema are unchanged. No implementation data
+is silently projected away. See the [migration plan](MIGRATION.md) and its
+synthetic compatibility fixtures. Items 16 and 17 remain separate work.
+
 ## Offline inspection
 
 `contract-watch inspect FILE` passes one file through the existing bounded
-snapshot reader and strict version 1 validator, then prints the same text report
+snapshot reader and strict version 1/2 validator, then prints the same text report
 used by capture (without the save confirmation). It makes no RPC calls, ignores
 `CONTRACT_WATCH_RPC_URL`, and does not write, migrate, or modify snapshot data.
 Reading can update filesystem access metadata according to the operating system.
 
-Only regular files up to 512 KiB are accepted, including a symlink resolving to a
-regular file. Directories, FIFOs, missing paths and broken links give `FILE_READ`;
-corrupt JSON, unsupported versions, unknown/missing fields and invalid data give
+Only regular files up to 512 KiB (v1) or 768 KiB (v2) are accepted, including a
+symlink resolving to a regular file. Directories, FIFOs, missing paths and broken
+links give `FILE_READ`; corrupt JSON within the applicable limits, unsupported
+versions, unknown/missing fields and invalid data give
 `SNAPSHOT`. Existing code/word/quantity size and canonical-format checks apply.
 No flags are accepted. Missing/extra/empty filenames or flag-like arguments give
 `USAGE`; prefix filenames beginning with `-` with `./`.
@@ -297,6 +385,8 @@ block, including exact large integers. Empty slots/code and noncanonical words
 retain their existing interpretations. A saved source label is not proof of
 authenticity, and slot values do not prove proxy behavior, upgrades or safety.
 Snapshot v1, JSON diff v1 and the existing diff exit policy are unchanged.
+V2 reports label target and implementation bytecode separately and show address
+provenance, the beacon raw result if present, or an explicit skip/no-code state.
 
 ## Persistence and comparison
 
@@ -309,8 +399,9 @@ requires filesystem hard-link support; it does not promise directory durability
 after sudden power loss. Readers accept regular files and cap actual bytes read,
 including when a file grows after opening.
 
-Diff checks identity/source compatibility and nondecreasing block height. It
-compares full bytecode and all three raw words. Code is rendered as byte length
+Diff first requires two v1 files, then checks identity/source compatibility and
+nondecreasing block height. It compares full bytecode and all three raw words.
+Code is rendered as byte length
 and SHA-256 of decoded bytes; this fingerprint is not an EVM code hash. Local
 capture time and a later block alone are not contract changes. Equal heights with
 different hashes receive a possible-reorg notice. Equal hashes with different
@@ -413,7 +504,8 @@ Notices alone never trigger 2. Errors still exit **1**, even with this flag.
 `--exit-code` is accepted once, only by `diff`, with no value, and can be combined
 with `--json` in any position among the filenames. Duplicate or incompatible
 flags give `USAGE` before reading files. Both text and JSON reports are identical
-with and without this option. JSON/snapshot schema versions remain 1. See the
+with and without this option. JSON diff remains version 1 and accepts only v1
+snapshots. See the
 [README shell example](../README.md) for handling status 2 safely under `set -e`.
 
 ## Error categories
@@ -429,6 +521,7 @@ with and without this option. JSON/snapshot schema versions remain 1. See the
 | `BLOCK_UNAVAILABLE`, `BLOCK_CHANGED` | Select an available block or capture again after a reorg |
 | `FILE_READ`, `FILE_WRITE`, `FILE_EXISTS` | Use a valid local path and a new filename |
 | `SNAPSHOT`, `INCOMPARABLE`, `ORDER` | Check schema, target identity, source and comparison order |
+| `DIFF_VERSION` | Diff currently accepts two v1 snapshots only; inspect v2 individually |
 | `INTERNAL` | Unexpected local failure; reproduce with a synthetic fixture |
 
 The public error boundary emits fixed messages only. HTTP and JSON-RPC remote

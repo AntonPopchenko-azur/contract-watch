@@ -23,11 +23,12 @@ const messages = {
   BLOCK_UNAVAILABLE: 'Requested block is unavailable.',
   BLOCK_NOT_CANONICAL: 'Requested block hash is not canonical at its reported height.',
   BLOCK_CHANGED: 'The pinned block is no longer canonical. Capture a fresh snapshot.',
-  SNAPSHOT: 'Invalid or unsupported snapshot; expected the documented version 1 format.',
-  FILE_READ: 'Cannot read snapshot as a regular file (maximum 512 KiB).',
+  SNAPSHOT: 'Invalid or unsupported snapshot; expected the documented version 1 or 2 format.',
+  FILE_READ: 'Cannot read snapshot as a regular file (maximum 512 KiB for v1, 768 KiB for v2).',
   FILE_WRITE: 'Cannot save snapshot. Check the destination directory and permissions.',
   FILE_EXISTS: 'Destination already exists; choose a new snapshot filename.',
   INCOMPARABLE: 'Snapshots must have the same chain ID, address, and source kind.',
+  DIFF_VERSION: 'Comparison currently requires two version 1 snapshots; version 2 observations cannot be ignored.',
   ORDER: 'The second snapshot must be at the same or a later block height.',
   INTERNAL: 'Unexpected local failure.'
 };

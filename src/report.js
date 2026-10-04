@@ -17,7 +17,9 @@ export function observation(snapshot) {
   }
   if (implementation !== ZERO_WORD && beacon !== ZERO_WORD) return 'Both implementation and beacon slots populated; ambiguous evidence.';
   if (implementation !== ZERO_WORD) return 'Implementation slot populated; proxy behavior unverified.';
-  if (beacon !== ZERO_WORD) return 'Beacon slot populated; beacon implementation is not resolved.';
+  if (beacon !== ZERO_WORD) return snapshot.schemaVersion === 2
+    ? 'Beacon implementation() address observed; proxy behavior unverified.'
+    : 'Beacon slot populated; beacon implementation is not resolved.';
   if (admin !== ZERO_WORD) return 'Admin slot only; no EIP-1967 target found.';
   return 'No EIP-1967 target found; other proxy patterns may exist.';
 }
@@ -37,18 +39,30 @@ function slotDetails(raw) {
   return { raw, status, address: status === 'address' ? `0x${raw.slice(-40)}` : null };
 }
 
+function implementationReport(value) {
+  if (value.status === 'skipped') return `Implementation code skipped: ${value.reason}.`;
+  return [
+    `Implementation address: ${value.address} (via ${value.via})`,
+    ...(value.via === 'beacon' ? [`Beacon ${value.beacon} implementation() raw: ${value.raw}`] : []),
+    `Implementation code: ${codeSummary(codeDetails(value.code))}`,
+    ...(value.status === 'no-code' ? ['No code at the observed implementation address at this block.'] : []),
+    'Implementation observation only; code presence is not proof of proxy behavior or safety.'
+  ].join('\n');
+}
+
 export function snapshotReport(snapshot, { beaconResolution } = {}) {
   validateSnapshot(snapshot);
   return [
     `Contract Watch | chain ${snapshot.chainId} | ${snapshot.address}`,
     `Source: ${snapshot.source}${snapshot.source === 'synthetic' ? ' (demonstration only)' : ''}`,
     `Block: ${BigInt(snapshot.block.number)} (${snapshot.block.hash})`,
-    `Code: ${codeSummary(codeDetails(snapshot.code))}`,
+    `${snapshot.schemaVersion === 2 ? 'Target code' : 'Code'}: ${codeSummary(codeDetails(snapshot.code))}`,
     ...Object.keys(SLOTS).map(name => `${name}: ${slotValue(snapshot.slots[name])}`),
     beaconResolution?.status === 'resolved'
       ? 'Beacon implementation() returned an address; proxy behavior and implementation code are unverified.'
       : observation(snapshot),
-    ...(beaconResolution ? [beaconReport(beaconResolution)] : [])
+    ...(beaconResolution ? [beaconReport(beaconResolution)] : []),
+    ...(snapshot.schemaVersion === 2 ? [implementationReport(snapshot.implementation)] : [])
   ].join('\n');
 }
 
@@ -57,6 +71,7 @@ export function snapshotReport(snapshot, { beaconResolution } = {}) {
 export function diffDocument(before, after) {
   validateSnapshot(before);
   validateSnapshot(after);
+  if (before.schemaVersion !== 1 || after.schemaVersion !== 1) fail('DIFF_VERSION');
   if (before.chainId !== after.chainId || before.address !== after.address || before.source !== after.source) fail('INCOMPARABLE');
   if (BigInt(after.block.number) < BigInt(before.block.number)) fail('ORDER');
   const changes = [];

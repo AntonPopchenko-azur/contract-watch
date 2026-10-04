@@ -43,7 +43,7 @@ Display one existing snapshot without connecting to a chain:
 node bin/contract-watch.js inspect examples/before.json
 ```
 
-`inspect FILE` accepts exactly one snapshot v1 file and no options. It uses the
+`inspect FILE` accepts exactly one snapshot v1 or v2 file and no options. It uses the
 same strict reader and text formatter as capture, displaying source, chain ID,
 address, block number/hash, code size/fingerprint and the three EIP-1967 slots.
 Synthetic inputs are marked `synthetic (demonstration only)`. Large chain IDs
@@ -57,8 +57,9 @@ not an independent verification of its contents. The command ignores
 
 Success exits **0**, with the report on stdout and empty stderr. Invalid JSON,
 unsupported versions, unknown/missing fields, unreadable/non-regular files, and
-files over 512 KiB fail with exit **1**, empty stdout and a fixed safe stderr
-message. No migration or permissive parsing is performed. Snapshot/diff options
+files over their version's limit (512 KiB for v1, 768 KiB for v2) fail with exit
+**1**, empty stdout and a fixed safe stderr message. No migration or permissive
+parsing is performed. Snapshot/diff options
 such as `--rpc`, `--json` and `--exit-code` are rejected; for a filename starting
 with `-`, use a path such as `./-snapshot.json`.
 
@@ -165,6 +166,7 @@ credentials and fragments are rejected. The CLI never prints or stores the URL.
 | `--timeout-ms MS` | 100–60000 ms per whole request; default 10000 |
 | `--strict-checksum` | Opt-in exact EIP-55 casing for the target address; no value |
 | `--resolve-beacon` | Opt-in bounded beacon `implementation()` read; result in live text report only |
+| `--implementation-code` | Opt-in snapshot v2 with separately saved implementation code and address provenance; includes eligible beacon resolution |
 
 To select a particular block by hash, replace `--block finalized` in the capture
 example with `--block-hash HASH`, using the intended block's full hash. The
@@ -265,13 +267,14 @@ Add the valueless `--resolve-beacon` flag to a snapshot command to observe the
 address returned by an eligible beacon's `implementation()` at the selected
 block. It works with the existing block, hash, depth, checksum, timeout and RPC
 options. Repeating the flag, adding a value or using it with `inspect`/`diff`
-gives `USAGE` before RPC. Without the flag, capture never makes this call.
+gives `USAGE` before RPC. Default capture never makes this call; the separate
+`--implementation-code` mode below also uses it for eligible beacons.
 
 **The result is live text only and is not saved in the snapshot.** The file
 remains strict snapshot v1, with the original raw storage words and no additional
 fields. `inspect` and `diff` still work offline on old and new v1 files; they
 cannot replay this observation or detect a changed implementation behind an
-unchanged beacon. No new snapshot version or migration is introduced.
+unchanged beacon. This live-only option continues to produce v1.
 
 The CLI makes at most one call, after reading target code and all three slots.
 It requires nonempty target code, canonical address padding in every slot, an
@@ -300,6 +303,46 @@ implementation contract or safety. The call simulates execution without sending
 a transaction. Caller independence is required by the beacon specification but
 is not tested here. See the [beacon protocol contract](docs/PROTOCOL.md#beacon-resolution-live-only).
 
+## Save implementation code
+
+Add the valueless `--implementation-code` flag to capture a **snapshot v2**:
+
+```sh
+node bin/contract-watch.js snapshot --implementation-code \
+  --address 0x1111111111111111111111111111111111111111 \
+  --chain-id 1 --block finalized --out snapshots/with-implementation.json
+node bin/contract-watch.js inspect snapshots/with-implementation.json
+```
+
+Use your explicit RPC environment variable as above. The flag works with all
+block selectors, checksum and timeout options. It cannot be combined with
+`--resolve-beacon`; duplicates, values and use with `inspect`/`diff` give `USAGE`
+before RPC. Default capture and `--resolve-beacon` still save strict v1.
+
+V2 keeps `code` as the **target's** bytecode and preserves all raw slots. Its
+separate `implementation` object records an address, provenance and bytecode.
+With canonical slots, a nonzero implementation slot and empty beacon select the
+direct address. An empty implementation slot and nonzero beacon select the
+strict address returned by the same bounded beacon call described above; v2
+also saves that beacon address and raw ABI return word.
+
+Selection is conservative: no target code, any noncanonical slot (including
+admin), both target slots populated, or both target slots empty produce an
+explicit `skipped` reason and no extra RPC. An eligible address gets exactly one
+additional hash-pinned `eth_getCode` before the final block/chain checks.
+Empty code is saved as `status: "no-code"`, `code: "0x"`; nonempty code is
+`status: "observed"`. No recursive proxy traversal takes place, even for a
+self-reference. Code presence does not establish proxy behavior or safety.
+
+Offline `inspect` displays target and implementation code separately, including
+provenance, skips and no-code observations. **Diff currently requires two v1
+files.** Any comparison involving v2, including v2 against itself, fails with
+`DIFF_VERSION`, exit 1 and empty stdout in text/JSON modes. New observations
+are never silently discarded. Beacon upgrade comparisons and migration tooling
+remain roadmap items 16 and 17. See the [v2 contract](docs/PROTOCOL.md#file-contract-v2)
+and [compatibility and migration plan](docs/MIGRATION.md) before changing a saved
+history or a consumer. Old files need no conversion.
+
 ## What a snapshot means
 
 The CLI checks the chain, resolves the requested block, and passes the same
@@ -315,9 +358,11 @@ Existing files and symlinks are never overwritten. New snapshots are published
 atomically on filesystems supporting same-directory hard links and use mode
 `0600` on POSIX. Use a local directory you control.
 
-Limits are 1 MiB per HTTP response, 16 KiB of HTTP headers, 128 KiB of target code,
-and 512 KiB per snapshot input. Redirects and compressed responses are rejected.
-Without an eligible beacon call, successful captures have these bounded
+Limits are 1 MiB per ordinary HTTP response, 16 KiB of HTTP headers, and 128 KiB
+of decoded bytes **per** target/implementation code blob. Files are bounded at
+512 KiB for v1 and 768 KiB for v2, including whitespace; v2 can hold both maximum
+code blobs. Redirects and compressed responses are rejected.
+Before adding any opt-in reads, successful captures have these bounded
 sequential RPC budgets, where `T` is
 `--timeout-ms` (10 seconds by default):
 
@@ -331,6 +376,12 @@ sequential RPC budgets, where `T` is
 An eligible `--resolve-beacon` adds one request and at most `min(T, 5000 ms)`:
 9 requests for tag/number or depth 0, 10 for hash or positive depth. Skips add
 no requests. The beacon response limit is 4 KiB instead of the normal 1 MiB.
+
+With `--implementation-code`, a direct address adds one request / `T`; a beacon
+adds two requests / `T + min(T, 5000 ms)`; a skip adds none. Thus the largest
+successful capture (hash or positive depth plus beacon and code) makes 11
+requests, with sum of request deadlines `10*T + min(T, 5000 ms)`. An oversize
+or invalid implementation result aborts capture with no file or partial stdout.
 
 There are no retries or background loop. Depth underflow stops after the chain
 check and initial head lookup (two requests). Local file work is outside this
@@ -350,10 +401,9 @@ calls, wallet, signing or transaction submission are exposed.
 - With no code, the report says there is no code **at that block**. With empty
   target slots it says no EIP-1967 target was found, including ordinary contracts.
   Other proxy patterns may still exist; the tool does not identify every proxy.
-- A beacon address is recorded. Its `implementation()` is queried only with the
-  opt-in live feature above. An upgrade behind an unchanged beacon remains
-  invisible to saved snapshot comparisons. Implementation contract bytecode is
-  also outside this increment's scope.
+- Beacon resolution and implementation code are opt-in observations. Saved v1
+  comparisons cannot detect an implementation change behind an unchanged beacon;
+  v2 inspection is supported, while v2 comparisons are explicitly rejected.
 - Snapshots compare endpoints in time, so intermediate upgrades can be missed.
   A changed slot does not by itself prove that an upgrade transaction occurred.
   Same-height fork comparisons and inconsistent same-hash data receive notices.

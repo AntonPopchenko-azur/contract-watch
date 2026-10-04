@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { capture, captureWithBeacon, readSnapshot, saveSnapshot } from '../src/snapshot.js';
+import { capture, captureWithBeacon, captureWithImplementation, readSnapshot, saveSnapshot } from '../src/snapshot.js';
 import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
 import { timeout } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
@@ -21,6 +21,9 @@ Snapshot options:
   --strict-checksum   Require exact EIP-55 address casing before any RPC call
   --resolve-beacon    Read an eligible beacon's implementation(); live report only
                       At most 1 call, 100000 gas, min(timeout, 5000 ms), 4 KiB response
+  --implementation-code  Save v2 with separate implementation code and address provenance
+                      Resolves an eligible beacon with the same call limits
+                      Cannot combine with --resolve-beacon; diff requires v1
 
 Diff options:
   --json             Version 1 JSON report on stdout; errors remain on stderr
@@ -31,20 +34,20 @@ Choose at most one of --block, --block-hash or --depth. Depth is not finality.
 Output files are never overwritten. Parent directory must already exist.
 Address validation defaults to 20-byte hex syntax; EIP-55 checking is opt-in.
 Diff is offline. Default exit status: 0 success (including changes), 1 error.
-Inspect is offline and accepts one snapshot v1 file, no options; exit 0/1.
+Inspect is offline and accepts one snapshot v1 or v2 file, no options; exit 0/1.
 Beacon results are not saved in v1 files. No safety assessment or complete proxy detection.
 `;
 
 function parseSnapshot(args) {
   const allowed = new Set([
     '--address', '--chain-id', '--out', '--rpc', '--block', '--block-hash', '--depth', '--timeout-ms',
-    '--strict-checksum', '--resolve-beacon'
+    '--strict-checksum', '--resolve-beacon', '--implementation-code'
   ]);
   const options = {};
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
     if (!allowed.has(key) || Object.hasOwn(options, key)) fail('USAGE');
-    if (key === '--strict-checksum' || key === '--resolve-beacon') {
+    if (['--strict-checksum', '--resolve-beacon', '--implementation-code'].includes(key)) {
       options[key] = true;
       continue;
     }
@@ -53,6 +56,7 @@ function parseSnapshot(args) {
     options[key] = value;
   }
   if (!options['--address'] || !options['--chain-id'] || !options['--out']) fail('USAGE');
+  if (options['--resolve-beacon'] && options['--implementation-code']) fail('USAGE');
   if (['--block', '--block-hash', '--depth'].filter(key => Object.hasOwn(options, key)).length > 1) fail('USAGE');
   return options;
 }
@@ -93,8 +97,10 @@ async function main(args) {
       timeoutMs: timeout(options['--timeout-ms']),
       strictChecksum: options['--strict-checksum'] ?? false
     };
-    const { snapshot, beaconResolution } = options['--resolve-beacon']
-      ? await captureWithBeacon(captureOptions) : { snapshot: await capture(captureOptions) };
+    const { snapshot, beaconResolution } = options['--implementation-code']
+      ? { snapshot: await captureWithImplementation(captureOptions) }
+      : options['--resolve-beacon']
+        ? await captureWithBeacon(captureOptions) : { snapshot: await capture(captureOptions) };
     const report = snapshotReport(snapshot, { beaconResolution });
     await saveSnapshot(options['--out'], snapshot);
     process.stdout.write(`${report}\nSnapshot saved.\n`);
