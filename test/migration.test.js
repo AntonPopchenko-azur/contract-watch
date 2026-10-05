@@ -89,7 +89,7 @@ test('strict v3 origin/observation validation never weakens v1 or v2', () => {
     s => { delete s.migration; }, s => { delete s.implementation; }, s => { s.extra = 'PRIVATE_KEY'; },
     s => { s.migration.extra = 'PRIVATE_KEY'; }, s => { s.migration.fromVersion = '1'; },
     s => { s.migration.fromVersion = 3; }, s => { s.migration.fromVersion = 0; },
-    s => { s.schemaVersion = 4; }, s => { s.implementation.secret = 'PRIVATE_KEY'; },
+    s => { s.schemaVersion = 5; }, s => { s.implementation.secret = 'PRIVATE_KEY'; },
     s => { s.capturedAt = 'invalid'; }, s => { s.slots.admin = '0x0'; },
     s => { s.block.number = '0x01'; }, s => { s.chainId = '0x1'; }
   ]) {
@@ -121,7 +121,7 @@ test('strict v3 origin/observation validation never weakens v1 or v2', () => {
 
 test('version negotiation rejects unsupported targets, repeats and already-v3 without creating output', async t => {
   const { dir, input, output } = await inputFile(t);
-  for (const version of ['1', '2', '4', '03', '3.0', '-1', 'latest', 'PRIVATE_VERSION']) {
+  for (const version of ['1', '2', '5', '04', '4.0', '03', '3.0', '-1', 'latest', 'PRIVATE_VERSION']) {
     failure(await cli(args(input, output, version)), 'MIGRATION_VERSION');
     await assert.rejects(migrateFile({ input: join(dir, 'missing'), output, toVersion: version }), { code: 'MIGRATION_VERSION' });
   }

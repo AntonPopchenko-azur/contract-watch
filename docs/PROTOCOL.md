@@ -139,6 +139,10 @@ RPC honesty. A provider may have pruned the selected state.
    or malformed metadata still fails. A changed chain gives `CHAIN_MISMATCH`.
 7. Only after all checks succeed, save a complete snapshot.
 
+With `--genesis`, insert the two checks specified in
+[Genesis identity capture](#genesis-identity-capture); the sequence above is
+the unchanged default.
+
 The hash selector follows [EIP-1898](https://eips.ethereum.org/EIPS/eip-1898).
 It makes the state reads refer to the same block even across a head change.
 The final recheck detects a reorg at that point, not permanent finality. An
@@ -152,7 +156,7 @@ An eligible beacon adds one request with timeout `min(timeoutMs, 5000)`: at most
 9 requests / `8*T + min(T,5000)` ms for tags, numbers and depth 0, or 10 requests /
 `9*T + min(T,5000)` ms for hash and positive depth, where T is the configured
 timeout in ms. Skipped resolution adds zero requests.
-This excludes local file work. Depth underflow stops after two requests; invalid
+This excludes local file work. Depth underflow stops after two requests (three with genesis); invalid
 options make none. The generic allowlist remains chain, block-by-number/hash,
 code and storage reads; only a dedicated beacon operation can use `eth_call`.
 Provider errors (including
@@ -285,8 +289,8 @@ filename is included in the format. `capturedAt` is not the block timestamp.
 Only `snapshot --implementation-code` writes v2. The flag is valueless, accepted
 once, snapshot-only, and mutually exclusive with `--resolve-beacon`. Violations
 give `USAGE` before RPC or file work. The programmatic entry point is
-`captureWithImplementation(options)` returning the snapshot itself. Existing
-`capture` and `captureWithBeacon` retain their v1 contracts.
+`captureWithImplementation(options)` returning the snapshot itself. Without
+the genesis option, `capture` and `captureWithBeacon` retain their v1 contracts.
 
 V2 has exactly the v1 top-level keys plus `implementation`, and `schemaVersion`
 is the JSON number `2`. All common fields retain their representations and
@@ -346,7 +350,7 @@ no partial success output.
 
 Starting from the base 8 requests (tag/number/depth 0) or 9 (hash/positive depth),
 direct code adds 1 request / `T`, beacon code adds 2 / `T + min(T,5000)`, and
-skips add none. Maximum successful capture: 11 requests and a sum of deadlines
+skips add none. Without genesis, maximum successful capture: 11 requests and a sum of deadlines
 `10*T + min(T,5000)` ms, excluding local work. Tests use loopback RPC only.
 
 V1 files remain capped at 512 KiB; v2 files at 768 KiB, counting actual UTF-8
@@ -368,7 +372,7 @@ compatibility fixtures and explicit migration to v3.
 ## File contract v3
 
 V3 is produced only by explicit offline `migrate SOURCE --to-version 3 --out NEW`.
-Capture still writes v1 or opt-in v2. V3 has exactly the v2 top-level fields plus
+Capture without `--genesis` writes v1 or opt-in v2. V3 has exactly the v2 top-level fields plus
 `migration`; `schemaVersion` is the number `3`. All common field representations,
 code/slot validation and meanings are unchanged. `migration` has exactly one key,
 `fromVersion`, whose numeric value is 1 or 2. No migration timestamp is stored;
@@ -389,8 +393,9 @@ atomic no-overwrite writer are shared with existing formats. Unknown versions
 retain the v1 size-limit policy; v1/v2 files do not acquire new accepted fields.
 
 The CLI requires one source and both explicit `--to-version` and `--out` options;
-only the exact string `3` is supported. Unsupported targets/downgrades give
-`MIGRATION_VERSION` before file I/O. Equal normalized input/output paths give
+the v3 conversion requires exact target `3` (target `4` is described below).
+Unsupported target strings give `MIGRATION_VERSION` before file I/O; a downgrade
+is rejected after source validation. Equal normalized input/output paths give
 `MIGRATION_PATH`. Valid already-v3 input gives `MIGRATION_CURRENT` and writes
 nothing. Duplicate/missing/unknown flags or additional sources give `USAGE`.
 Existing destinations give `FILE_EXISTS`, including aliases and race losers.
@@ -406,15 +411,86 @@ fetched. Migration origin metadata is not proof of authenticity. See
 [MIGRATION.md](MIGRATION.md) for failure ordering, race and filesystem guarantees,
 and [synthetic v3 fixtures](../test/fixtures/migration/).
 
+## Genesis identity capture
+
+The snapshot-only, valueless `--genesis` flag opts into v4; programmatic callers
+pass boolean `genesis: true` to any existing capture entry point. A nonboolean
+programmatic value fails `USAGE`. No expected hash option, network discovery or
+built-in chain/hash map exists. All input checks, exclusive selectors and the
+beacon/implementation conflict are enforced before connections. Defaults retain
+v1/v2 output and the exact old request sequence.
+
+With genesis enabled, insert exactly these two ordinary requests into the
+sequence above:
+
+1. Immediately after the initial matching `eth_chainId`, request
+   `eth_getBlockByNumber` with exactly `['0x0', false]`.
+2. After all state observations and the final selected-block canonical recheck,
+   repeat that same request. Require equality with the initial normalized hash,
+   then perform the existing final `eth_chainId` check.
+
+Both headers use the mined header parser: canonical uint256 hex number, exactly
+32 hash bytes, no pending/null fields. Genesis additionally requires number
+`0x0` and a nonzero hash. Hex letters normalize to lowercase. Null header gives
+`BLOCK_UNAVAILABLE`; malformed metadata, wrong number or zero hash gives
+`RPC_DATA`. A different valid hash on recheck gives `GENESIS_CHANGED` even if
+chain ID and selected block remain unchanged. Existing selected-block failures
+retain their existing errors. If selected height is zero, require its hash to
+match genesis before state reads too. No lookup is deduplicated, including at
+height zero; all state reads still use the selected EIP-1898 hash.
+
+Each request has the ordinary 1 MiB body, 16 KiB header and T timeout bounds.
+Add exactly 2 requests and `2*T` to each successful old budget: base 10 for
+number/tag/depth 0, base 11 for hash/positive depth. Direct implementation adds
+1 request / T, eligible live beacon adds 1 request / min(T,5000), beacon plus
+code adds 2 requests / (T+min(T,5000)); skips add none. Maximum: 13 requests and
+`12*T + min(T,5000)` ms. Depth underflow uses 3 requests with genesis. Failure
+stops at its request, with no retries, replacement identity, partial stdout or
+new snapshot. Local file work is outside request deadlines.
+
+Genesis is an additional provider observation, not cryptographic ancestry
+verification or authentication. A provider can lie or switch and switch back
+between checks; forks can share genesis. Matching chain ID and genesis do not
+prove network uniqueness, honesty, finality, contract behavior or safety.
+
+## File contract v4
+
+V4 has all v2 common top-level fields (`schemaVersion: 4`, source, capturedAt,
+chainId, address, block, code, slots, implementation), plus exactly `genesis`.
+All common representations and limits remain; target and implementation code
+stay separate. Unknown keys are rejected at every nested level. Two branches:
+
+| Genesis | Additional requirements |
+| --- | --- |
+| Exactly `{status: "observed", hash: HASH}` | HASH is canonical lowercase nonzero 32-byte hex; at selected block 0 it equals block.hash. No migration key. Implementation is a complete valid v2 observation/skip, or exactly `{status: "not-recorded"}` when implementation code was not recorded. |
+| Exactly `{status: "not-recorded"}` | Exactly one additional top-level field, `migration: {fromVersion: 1 or 2}`. The original format and implementation satisfy the same strict v3 origin rules. No genesis hash, reason or inferred value is permitted. |
+
+Capture with `--genesis` writes the observed branch. `--implementation-code`
+uses unchanged v2 eligibility/provenance rules; without it, implementation is
+not-recorded regardless of raw slots or code. `--resolve-beacon` keeps its
+transient live result separate and never saves it or changes this marker.
+The unknown-genesis branch is produced only by explicit migration. For v3→v4,
+`migration.fromVersion` remains the original v1/v2 observation format, not the
+immediate predecessor 3. No migration timestamp is introduced. File assertions
+are not authenticated evidence of provenance.
+
+V4 is capped at 768 KiB including whitespace, with each code blob at 128 KiB.
+Both maximum blobs fit; bounded reads and private atomic no-overwrite writes
+are shared unchanged. V1/v2/v3 gain no accepted keys or loosened validation.
+Inspect v4 prints observed genesis and its trust limitation or an explicit
+not-recorded warning. Saved implementation availability remains separate.
+See [migration pairs and backup guarantees](MIGRATION.md) and the independent
+[synthetic v4 fixtures](../test/fixtures/genesis/), generated on 2026-10-05.
+
 ## Offline inspection
 
 `contract-watch inspect FILE` passes one file through the existing bounded
-snapshot reader and strict version 1/2/3 validator, then prints the same text report
+snapshot reader and strict version 1/2/3/4 validator, then prints the same text report
 used by capture (without the save confirmation). It makes no RPC calls, ignores
 `CONTRACT_WATCH_RPC_URL`, and does not write, migrate, or modify snapshot data.
 Reading can update filesystem access metadata according to the operating system.
 
-Only regular files up to 512 KiB (v1) or 768 KiB (v2/v3) are accepted, including a
+Only regular files up to 512 KiB (v1) or 768 KiB (v2/v3/v4) are accepted, including a
 symlink resolving to a regular file. Directories, FIFOs, missing paths and broken
 links give `FILE_READ`; corrupt JSON within the applicable limits, unsupported
 versions, unknown/missing fields and invalid data give
@@ -454,7 +530,7 @@ capture time and a later block alone are not contract changes. Equal heights wit
 different hashes receive a possible-reorg notice. Equal hashes with different
 content or heights receive an inconsistent-data notice. Neither notice proves
 an upgrade or provides a safety judgment.
-For v2/v3 pairs of the same version, implementation observations are compared separately with the
+For v2/v3/v4 pairs of the same version, implementation observations are compared separately with the
 availability/provenance policy below. Diff reads only local files, ignores RPC
 configuration and does not modify inputs or fetch missing historical data.
 
@@ -469,7 +545,8 @@ usage errors. Use `./` for filenames starting with `--`.
 
 This output schema is independent of the input snapshot schema and package
 version. Two v1 snapshots select JSON diff v1; two v2 snapshots select JSON diff
-v2; two v3 snapshots select JSON diff v3. Consumers must check `kind` and `schemaVersion` before processing. All
+v2; two v3 snapshots select JSON diff v3; v4 pairs use diff v4 after genesis checks.
+Consumers must check `kind` and `schemaVersion` before processing. All
 fields below are always present in version 1. Existing field types, meanings and
 enum values are stable; incompatible changes require a new schema version.
 Consumers may ignore future extra object fields. Object key order is not a
@@ -681,12 +758,46 @@ failure behavior apply before any output. Text reports identify not-recorded
 endpoints and why comparison is unavailable; they never label missing historical
 observations as unchanged implementation. Older readers reject schemaVersion 3.
 
+## JSON diff contract, version 4
+
+Validate both snapshots and require the same snapshot version first, then equal
+chain ID/address/source as before. For v4, require both genesis states observed;
+otherwise fail `GENESIS_UNAVAILABLE`, including unknown/unknown and self-diffs.
+Require the recorded hashes to match or fail `GENESIS_MISMATCH`, even at equal
+chain ID and identical selected block/state. These are identity errors, not
+contract changes, possible reorg notices or successful empty comparisons.
+Only then check block order and compare data. All errors exit 1 with empty
+stdout in text/JSON and with/without `--exit-code`.
+
+Successful JSON is exactly diff v3 with `schemaVersion: 4` and one additional
+shared object `genesis: {status: "observed", hash: HASH}`. `kind`, strings for
+large integers, both change arrays, notice rules and implementation availability/
+provenance policies remain. Text identifies matching genesis observations and
+warns that forks can share them. A missing implementation observation remains
+unavailable, independently of genesis; it does not contradict a recorded one.
+No migration metadata, timestamps, paths or raw code are emitted. Genesis is
+never placed in a changes array. Default success is exit 0; `--exit-code` gives
+2 exactly for known target/slot or comparable implementation changes, otherwise
+0. No claim of complete coverage or safety follows from 0.
+
+Mixed v1/v2/v3/v4 pairs fail `DIFF_VERSION` in either direction. No automatic
+migration or RPC occurs. Legacy same-version pairs retain their exact successful
+output and chain-ID-only identity limitation. Migrating old files cannot make
+their unknown network equivalent to a new observation; keep original files for
+legacy comparisons or take new captures with explicit genesis. No override is
+provided. Independent v4 JSON/text golden fixtures extend the earlier v2 goldens
+with the new version and genesis field/line only; production reporting code did
+not generate those expected results.
+
 ## Error categories
 
 | Codes | Meaning / action |
 | --- | --- |
 | `USAGE`, `ADDRESS`, `CHAIN_ID`, `BLOCK`, `RPC_URL`, `TIMEOUT_OPTION` | Correct local arguments; see `--help` |
 | `CHAIN_MISMATCH` | Verify the expected chain and chosen endpoint |
+| `GENESIS_CHANGED` | Genesis observations or selected block 0 disagree during capture |
+| `GENESIS_MISMATCH` | Recorded genesis hashes differ; do not compare as one network |
+| `GENESIS_UNAVAILABLE` | At least one v4 file lacks recorded genesis; equivalence is unknown |
 | `RPC_TIMEOUT`, `RPC_NETWORK`, `RPC_HTTP` | Check provider reachability, credentials and configured timeout |
 | `RPC_SIZE`, `RPC_ENCODING` | Response exceeds a bound or uses unsupported compression |
 | `RPC_ENVELOPE`, `RPC_DATA` | Provider returned invalid protocol data |
@@ -695,8 +806,8 @@ observations as unchanged implementation. Older readers reject schemaVersion 3.
 | `FILE_READ`, `FILE_WRITE`, `FILE_EXISTS` | Use a valid local path and a new filename |
 | `SNAPSHOT`, `INCOMPARABLE`, `ORDER` | Check schema, target identity, source and comparison order |
 | `DIFF_VERSION` | Use two snapshots of the same version; missing v1 observations cannot be inferred |
-| `MIGRATION_VERSION` | Only explicit target 3 is supported; no downgrades or lossy v1-to-v2 conversion |
-| `MIGRATION_CURRENT` | Source is already v3; no output is created |
+| `MIGRATION_VERSION` | Only explicit targets 3/4 are supported; no downgrades or lossy v1-to-v2 conversion |
+| `MIGRATION_CURRENT` | Source already uses the requested version; no output is created |
 | `MIGRATION_PATH` | Choose a new path; in-place migration is forbidden |
 | `INTERNAL` | Unexpected local failure; reproduce with a synthetic fixture |
 

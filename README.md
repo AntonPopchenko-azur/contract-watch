@@ -43,7 +43,7 @@ Display one existing snapshot without connecting to a chain:
 node bin/contract-watch.js inspect examples/before.json
 ```
 
-`inspect FILE` accepts exactly one snapshot v1, v2 or v3 file and no options. It uses the
+`inspect FILE` accepts exactly one snapshot v1, v2, v3 or v4 file and no options. It uses the
 same strict reader and text formatter as capture, displaying source, chain ID,
 address, block number/hash, code size/fingerprint and the three EIP-1967 slots.
 Synthetic inputs are marked `synthetic (demonstration only)`. Large chain IDs
@@ -57,7 +57,7 @@ not an independent verification of its contents. The command ignores
 
 Success exits **0**, with the report on stdout and empty stderr. Invalid JSON,
 unsupported versions, unknown/missing fields, unreadable/non-regular files, and
-files over their version's limit (512 KiB for v1, 768 KiB for v2/v3) fail with exit
+files over their version's limit (512 KiB for v1, 768 KiB for v2/v3/v4) fail with exit
 **1**, empty stdout and a fixed safe stderr message. No automatic migration or permissive
 parsing is performed. Snapshot/diff options
 such as `--rpc`, `--json` and `--exit-code` are rejected; for a filename starting
@@ -101,6 +101,7 @@ unknown flags are rejected. Prefix a filename starting with `--` with `./`.
 Two v2 snapshots produce JSON diff v2 with separate implementation observations
 and changes, as described [below](#compare-saved-implementation-observations).
 Two v3 snapshots produce JSON diff v3, with explicit missing historical data.
+Two v4 snapshots use JSON diff v4 and require matching recorded genesis hashes.
 Mixed-version inputs fail with `DIFF_VERSION`; no historical data is inferred.
 
 By default, changed and unchanged comparisons exit **0**, including a comparison
@@ -113,7 +114,7 @@ check the exit status before parsing stdout. JSON diff is offline and ignores
 For automation, `diff --exit-code` distinguishes observed state changes from an
 unchanged comparison. It works with text output and with `--json`; neither
 report changes. The status is based only on `changed`: target code or raw slot
-changes, plus comparable implementation address/code changes for v2/v3 pairs.
+changes, plus comparable implementation address/code changes for v2/v3/v4 pairs.
 Notices without state changes, such as different hashes at the same height,
 do not produce status 2. Status 2 indicates a completed comparison, not an error
 or proof of an upgrade.
@@ -275,11 +276,12 @@ options. Repeating the flag, adding a value or using it with `inspect`/`diff`
 gives `USAGE` before RPC. Default capture never makes this call; the separate
 `--implementation-code` mode below also uses it for eligible beacons.
 
-**The result is live text only and is not saved in the snapshot.** The file
-remains strict snapshot v1, with the original raw storage words and no additional
+**The result is live text only and is not saved in the snapshot.** Without
+`--genesis`, the file remains strict snapshot v1, with the original raw storage words and no additional
 fields. `inspect` and `diff` still work offline on old and new v1 files; they
 cannot replay this observation or detect a changed implementation behind an
-unchanged beacon. This live-only option continues to produce v1.
+unchanged beacon. Without `--genesis`, this live-only option continues to produce v1; with
+`--genesis` it produces v4, still without saving the live beacon response.
 
 The CLI makes at most one call, after reading target code and all three slots.
 It requires nonempty target code, canonical address padding in every slot, an
@@ -322,7 +324,8 @@ node bin/contract-watch.js inspect snapshots/with-implementation.json
 Use your explicit RPC environment variable as above. The flag works with all
 block selectors, checksum and timeout options. It cannot be combined with
 `--resolve-beacon`; duplicates, values and use with `inspect`/`diff` give `USAGE`
-before RPC. Default capture and `--resolve-beacon` still save strict v1.
+before RPC. Without `--genesis`, default capture and `--resolve-beacon` still save strict v1.
+Combining `--implementation-code` with `--genesis` saves its observation in v4.
 
 V2 keeps `code` as the **target's** bytecode and preserves all raw slots. Its
 separate `implementation` object records an address, provenance and bytecode.
@@ -341,7 +344,7 @@ self-reference. Code presence does not establish proxy behavior or safety.
 
 Offline `inspect` displays target and implementation code separately, including
 provenance, skips and no-code observations. Diff accepts two files of the same
-version (v1, v2 or v3); mixed versions fail with `DIFF_VERSION`, exit 1 and empty
+version (v1, v2, v3 or v4); mixed versions fail with `DIFF_VERSION`, exit 1 and empty
 stdout in text/JSON modes. See the [v2 contract](docs/PROTOCOL.md#file-contract-v2)
 and [migration contract](docs/MIGRATION.md) before changing a saved
 history or a consumer. Old files need no conversion.
@@ -404,12 +407,13 @@ node bin/contract-watch.js diff --json --exit-code \
 ```
 
 Create the `snapshots` directory first. Migration supports **v1 → v3 and v2 → v3**
-only. It never reads RPC configuration, makes a request or performs a new capture.
+with target `3`, and **v1/v2/v3 → v4** with target `4`. It never reads RPC
+configuration, makes a request or performs a new capture.
 All existing target code, raw slots, chain/block values, source and `capturedAt`
 are retained. V1 gains only `implementation: {"status":"not-recorded"}`; no
 historical address, code or skip reason is inferred. V2 implementation observations
 are preserved in full. V3 records `migration.fromVersion` as 1 or 2; no migration
-timestamp replaces the capture time. Capture itself still writes v1/v2.
+timestamp replaces the capture time. Capture writes v1/v2 by default, or v4 with `--genesis`.
 
 The original file is the backup: its bytes, modification time and permissions
 remain unchanged. No separate backup file is created. Output is private and
@@ -418,9 +422,9 @@ symlinks, hardlinks, in-place paths and concurrent losers are rejected; no parti
 output is published on failure. Use an existing destination directory you control.
 
 Migration exits 0 only after saving, with a fixed confirmation and empty stderr.
-Errors exit 1 with empty stdout and safe stderr. Only the exact target `3` is
-accepted; downgrades, v1-to-v2, aliases and unknown versions are rejected.
-Already-v3 input gives `MIGRATION_CURRENT` without creating output. Repeating
+Errors exit 1 with empty stdout and safe stderr. Only exact targets `3` and `4`
+are accepted; downgrades, v1-to-v2, aliases and unknown versions are rejected.
+An input already at its target version gives `MIGRATION_CURRENT` without output. Repeating
 an old source with the same destination gives `FILE_EXISTS`; explicitly choosing
 another new destination produces the same deterministic migrated content.
 Flags may surround the single source argument; duplicates, missing values and
@@ -433,7 +437,59 @@ still count normally; available observations use the v2 comparison rules. A
 missing record versus a recorded observation at the same hash is not itself
 inconsistent block data. Mixed versions are still rejected; migrate both inputs
 explicitly to v3 to compare their available data. Older v1/v2 readers reject v3.
-See [migration and backup guarantees](docs/MIGRATION.md) for limits and errors.
+
+Migration to v4 adds exactly `genesis: {"status":"not-recorded"}`. It cannot
+recover genesis from chain ID, source label or selected block, even block 0.
+V3→v4 retains the original `migration.fromVersion` (1 or 2); direct v1/v2→v4
+and the path through v3 yield the same data. Implementation observations and
+capture timestamps stay intact. Inspect works, but v4 diff refuses an unknown
+genesis on either side with `GENESIS_UNAVAILABLE`, even for a file compared
+with itself. Keep legacy files for comparisons under their legacy chain-ID-only
+contract, or make new explicit genesis captures. No override or automatic RPC
+backfill is provided. See [migration and backup guarantees](docs/MIGRATION.md).
+
+## Record genesis identity
+
+Add the valueless `--genesis` flag to save **snapshot v4** with the RPC's observed
+block-0 hash alongside the exact chain ID:
+
+```sh
+node bin/contract-watch.js snapshot --genesis --implementation-code \
+  --address 0x1111111111111111111111111111111111111111 \
+  --chain-id 1 --block finalized --out snapshots/with-genesis.json
+```
+
+Use your chosen RPC as in the capture example. Nothing enables this option
+implicitly, and no public hash is substituted. The flag does not accept an
+expected hash or any value. Duplicates, `--genesis=true`, and use on offline
+commands are `USAGE` errors before RPC. It composes with every block selector,
+checksum/timeout option, and either implementation mode; the existing mutually
+exclusive flags remain mutually exclusive.
+
+After the initial chain check, `eth_getBlockByNumber` with `['0x0', false]`
+reads a mined header whose number must be exactly zero and hash must be a nonzero
+32-byte value. After state reads and the final selected-block check, it reads
+block 0 again and requires the same hash, then rechecks the chain ID. This detects
+observed switching between networks sharing a chain ID. Selecting block 0 also
+requires its hash to match the initial genesis before reading state. Null headers,
+malformed/zero hashes, errors or changed identity abort with empty stdout and no
+new file. There are no retries; ordinary response limits and deadlines apply.
+
+V4 saves `genesis: {"status":"observed","hash":"0x…"}`. Without
+`--implementation-code`, its implementation field is exactly `{"status":"not-recorded"}`;
+with that flag, the complete v2 observation or skip is retained. A live
+`--resolve-beacon` result remains transient, even in v4.
+
+V4 diff requires both recorded genesis hashes to match. Different hashes yield
+`GENESIS_MISMATCH` (exit 1, empty stdout), never a contract change or fork notice.
+Missing historical genesis yields `GENESIS_UNAVAILABLE`. Matching observations
+permit the usual target/slot and implementation comparisons, with JSON diff v4
+including the shared genesis object and the same exit 0/2 policy. Mixed snapshot
+versions still fail; v1/v2/v3 comparisons retain their older identity limitations.
+
+One RPC can lie, and forks can share both chain ID and genesis. These checks do
+not prove selected-block ancestry, authenticity, finality, uniqueness or safety.
+See the [v4 format and identity contract](docs/PROTOCOL.md#file-contract-v4).
 
 ## What a snapshot means
 
@@ -452,7 +508,7 @@ atomically on filesystems supporting same-directory hard links and use mode
 
 Limits are 1 MiB per ordinary HTTP response, 16 KiB of HTTP headers, and 128 KiB
 of decoded bytes **per** target/implementation code blob. Files are bounded at
-512 KiB for v1 and 768 KiB for v2/v3, including whitespace; v2/v3 can hold both maximum
+512 KiB for v1 and 768 KiB for v2/v3/v4, including whitespace; v2/v3/v4 can hold both maximum
 code blobs. Redirects and compressed responses are rejected.
 Before adding any opt-in reads, successful captures have these bounded
 sequential RPC budgets, where `T` is
@@ -470,13 +526,16 @@ An eligible `--resolve-beacon` adds one request and at most `min(T, 5000 ms)`:
 no requests. The beacon response limit is 4 KiB instead of the normal 1 MiB.
 
 With `--implementation-code`, a direct address adds one request / `T`; a beacon
-adds two requests / `T + min(T, 5000 ms)`; a skip adds none. Thus the largest
+adds two requests / `T + min(T, 5000 ms)`; a skip adds none. Without genesis, the largest
 successful capture (hash or positive depth plus beacon and code) makes 11
 requests, with sum of request deadlines `10*T + min(T, 5000 ms)`. An oversize
 or invalid implementation result aborts capture with no file or partial stdout.
 
+`--genesis` adds exactly two ordinary requests / `2*T` in every successful
+mode, including when the selected block is 0. Base totals become 10 or 11;
+the maximum with beacon code is 13 requests / `12*T + min(T,5000 ms)`.
 There are no retries or background loop. Depth underflow stops after the chain
-check and initial head lookup (two requests). Local file work is outside this
+check and initial head lookup (two requests, or three with genesis). Local file work is outside this
 RPC timeout budget. Block lookups request transaction hashes only,
 not full transaction objects; the same 1 MiB response limit applies to them.
 The generic RPC allowlist contains only chain, block, code, and storage reads.

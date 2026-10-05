@@ -12,6 +12,7 @@ Usage:
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
+  contract-watch migrate SOURCE.json --to-version 4 --out NEW.json
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -21,6 +22,7 @@ Snapshot options:
                       Decimal 0..2^256-1, at most 78 digits, no leading zeros
   --timeout-ms MS     Total timeout per request, 100–60000 (default 10000)
   --strict-checksum   Require exact EIP-55 address casing before any RPC call
+  --genesis          Save v4 with observed genesis identity; adds two block-0 reads
   --resolve-beacon    Read an eligible beacon's implementation(); live report only
                       At most 1 call, 100000 gas, min(timeout, 5000 ms), 4 KiB response
   --implementation-code  Save v2 with separate implementation code and address provenance
@@ -28,7 +30,7 @@ Snapshot options:
                       Cannot combine with --resolve-beacon
 
 Diff options:
-  --json             Version 1, 2 or 3 JSON report on stdout, matching the input pair
+  --json             Version 1, 2, 3 or 4 JSON report on stdout, matching the input pair
   --exit-code        Exit 2 for state changes, 0 without changes, 1 for errors
 
 All state reads use one block hash and require EIP-1898 support.
@@ -36,25 +38,27 @@ Choose at most one of --block, --block-hash or --depth. Depth is not finality.
 Output files are never overwritten. Parent directory must already exist.
 Address validation defaults to 20-byte hex syntax; EIP-55 checking is opt-in.
 Diff is offline. Default exit status: 0 success (including changes), 1 error.
-Diff requires matching snapshot versions; v2/v3 compare available implementation observations.
+Diff requires matching snapshot versions; v2/v3/v4 compare available implementation observations.
+V4 diff requires two equal recorded genesis hashes; unknown/different identities fail.
 Skipped observations or changed provenance are shown without inferring code changes.
-Inspect is offline and accepts one snapshot v1, v2 or v3 file, no options; exit 0/1.
-Migrate is offline: v1/v2 to v3 only; original bytes retained as backup, no overwrite.
+Inspect is offline and accepts one snapshot v1, v2, v3 or v4 file, no options; exit 0/1.
+Migrate is offline: v1/v2 to v3 or v1/v2/v3 to v4; original retained as backup, no overwrite.
 V1 migration marks implementation not-recorded; v2 observations are preserved.
-Already-v3 inputs are rejected without output. Capture continues to write v1/v2.
+Migration to v4 marks genesis not-recorded. Already-current inputs fail without output.
+Capture writes v1/v2 unless --genesis is explicit. Genesis is not proof of network trust.
 Beacon results are not saved in v1 files. No safety assessment or complete proxy detection.
 `;
 
 function parseSnapshot(args) {
   const allowed = new Set([
     '--address', '--chain-id', '--out', '--rpc', '--block', '--block-hash', '--depth', '--timeout-ms',
-    '--strict-checksum', '--resolve-beacon', '--implementation-code'
+    '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis'
   ]);
   const options = {};
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
     if (!allowed.has(key) || Object.hasOwn(options, key)) fail('USAGE');
-    if (['--strict-checksum', '--resolve-beacon', '--implementation-code'].includes(key)) {
+    if (['--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis'].includes(key)) {
       options[key] = true;
       continue;
     }
@@ -115,8 +119,8 @@ async function main(args) {
     process.stdout.write('0.1.0\n'); return;
   }
   if (args[0] === 'migrate') {
-    await migrateFile(parseMigration(args.slice(1)));
-    process.stdout.write('Snapshot migrated to version 3. Original preserved as backup.\n');
+    const migrated = await migrateFile(parseMigration(args.slice(1)));
+    process.stdout.write(`Snapshot migrated to version ${migrated.schemaVersion}. Original preserved as backup.\n`);
     return;
   }
   if (args[0] === 'snapshot') {
@@ -126,7 +130,8 @@ async function main(args) {
       address: options['--address'], chainId: options['--chain-id'],
       block: options['--block'], blockHash: options['--block-hash'], depth: options['--depth'],
       timeoutMs: timeout(options['--timeout-ms']),
-      strictChecksum: options['--strict-checksum'] ?? false
+      strictChecksum: options['--strict-checksum'] ?? false,
+      genesis: options['--genesis'] ?? false
     };
     const { snapshot, beaconResolution } = options['--implementation-code']
       ? { snapshot: await captureWithImplementation(captureOptions) }

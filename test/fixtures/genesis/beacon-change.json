@@ -1,0 +1,67 @@
+{
+  "kind": "contract-watch-diff",
+  "schemaVersion": 4,
+  "chainId": "1",
+  "address": "0x1111111111111111111111111111111111111111",
+  "source": "synthetic",
+  "blocks": {
+    "before": {
+      "number": "0x64",
+      "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "after": {
+      "number": "0x65",
+      "hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  },
+  "changed": true,
+  "changes": [],
+  "notices": [],
+  "implementation": {
+    "comparison": "comparable",
+    "before": {
+      "status": "observed",
+      "via": "beacon",
+      "address": "0x2222222222222222222222222222222222222222",
+      "code": {
+        "bytes": 4,
+        "sha256": "5216838b8fb8c54530d3584009ad08ede545355966b47066ad9f5e8cdd55cbe8"
+      },
+      "beacon": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "raw": "0x0000000000000000000000002222222222222222222222222222222222222222"
+    },
+    "after": {
+      "status": "observed",
+      "via": "beacon",
+      "address": "0x3333333333333333333333333333333333333333",
+      "code": {
+        "bytes": 4,
+        "sha256": "c882a41ec757e4fcb259992f7448b4180283e38f63c6b5679bf23949d788d036"
+      },
+      "beacon": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "raw": "0x0000000000000000000000003333333333333333333333333333333333333333"
+    },
+    "changes": [
+      {
+        "field": "address",
+        "before": "0x2222222222222222222222222222222222222222",
+        "after": "0x3333333333333333333333333333333333333333"
+      },
+      {
+        "field": "code",
+        "before": {
+          "bytes": 4,
+          "sha256": "5216838b8fb8c54530d3584009ad08ede545355966b47066ad9f5e8cdd55cbe8"
+        },
+        "after": {
+          "bytes": 4,
+          "sha256": "c882a41ec757e4fcb259992f7448b4180283e38f63c6b5679bf23949d788d036"
+        }
+      }
+    ]
+  },
+  "genesis": {
+    "status": "observed",
+    "hash": "0xc1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
+  }
+}

@@ -44,21 +44,27 @@ GitHub release page. Never replace an existing published tag.
   keys, raw provider errors, arbitrary input strings, or underlying error stacks.
 - Preserve raw words. Empty slots, noncanonical data and ordinary contracts must
   not be converted into claims that a contract is safe or that all proxies are
-  detected. `--resolve-beacon` remains live-only and writes strict v1.
+  detected. `--resolve-beacon` remains live-only and writes strict v1 unless genesis is enabled.
   `--implementation-code` explicitly writes v2 with separate implementation code
   and validated address provenance; preserve raw words and strict unknown-field
   checks for every version. Its dedicated beacon
   implementation() call is hash-pinned, limited to 100000 gas, 4 KiB and at most
   5 seconds, with no generic eth_call access. Both code blobs are bounded at
-  128 KiB each; files at 512 KiB for v1 and 768 KiB for v2/v3. Diff requires matching
+  128 KiB each; files at 512 KiB for v1 and 768 KiB for v2/v3/v4. Diff requires matching
   snapshot versions: preserve v1 output; v2 uses JSON diff v2 and separately
   compares available implementation observations with the same provenance.
   Skips/provenance changes must not fabricate address/code changes. Mixed versions
-  remain DIFF_VERSION errors. Offline migration only converts v1/v2 to v3 at a new
+  remain DIFF_VERSION errors. Offline migration converts v1/v2 to v3, or v1/v2/v3 to v4, at a new
   path, retaining the original as backup. V1 gains only not-recorded; v2 retains
   its complete observation. Strict v3 migration provenance binds those states.
   V3 diff uses JSON diff v3; missing observations are unavailable, not unchanged,
-  empty code or same-hash contradictions. Follow docs/MIGRATION.md; no RPC in migration.
+  empty code or same-hash contradictions. Explicit --genesis writes strict v4:
+  observe nonzero block-0 hash before state reads and recheck before the final
+  chain check; selected block 0 must agree. All existing canonical/hash-pinned
+  reads remain. V4 migration only adds not-recorded genesis; preserve v3's original
+  fromVersion. V4 diff requires matching observed genesis, rejecting unknown or
+  different hashes as identity errors. Matching genesis is not proof of ancestry,
+  uniqueness or honesty. Follow docs/MIGRATION.md; no RPC in migration.
 - For each functional change, add meaningful regression/protocol/file tests and
   document user-visible behavior. Run `npm test` and `npm run demo` as appropriate.
   Tests use local fake RPC and temporary directories, without keys or external

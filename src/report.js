@@ -39,8 +39,10 @@ function slotDetails(raw) {
   return { raw, status, address: status === 'address' ? `0x${raw.slice(-40)}` : null };
 }
 
-function implementationReport(value) {
-  if (value.status === 'not-recorded') return 'Implementation observation not recorded in source v1; historical address and code are unavailable.';
+function implementationReport(value, version) {
+  if (value.status === 'not-recorded') return version === 4
+    ? 'Implementation code observation not recorded; saved address provenance and code are unavailable.'
+    : 'Implementation observation not recorded in source v1; historical address and code are unavailable.';
   if (value.status === 'skipped') return `Implementation code skipped: ${value.reason}.`;
   return [
     `Implementation address: ${value.address} (via ${value.via})`,
@@ -56,6 +58,9 @@ export function snapshotReport(snapshot, { beaconResolution } = {}) {
   return [
     `Contract Watch | chain ${snapshot.chainId} | ${snapshot.address}`,
     `Source: ${snapshot.source}${snapshot.source === 'synthetic' ? ' (demonstration only)' : ''}`,
+    ...(snapshot.schemaVersion === 4 ? [snapshot.genesis.status === 'observed'
+      ? `Genesis: ${snapshot.genesis.hash} (RPC observation; not proof of ancestry or provider honesty).`
+      : 'Genesis: not-recorded; network equivalence cannot be established from the chain ID.'] : []),
     `Block: ${BigInt(snapshot.block.number)} (${snapshot.block.hash})`,
     `${snapshot.schemaVersion === 1 ? 'Code' : 'Target code'}: ${codeSummary(codeDetails(snapshot.code))}`,
     ...Object.keys(SLOTS).map(name => `${name}: ${slotValue(snapshot.slots[name])}`),
@@ -63,8 +68,8 @@ export function snapshotReport(snapshot, { beaconResolution } = {}) {
       ? 'Beacon implementation() returned an address; proxy behavior and implementation code are unverified.'
       : observation(snapshot),
     ...(beaconResolution ? [beaconReport(beaconResolution)] : []),
-    ...(snapshot.schemaVersion !== 1 ? [implementationReport(snapshot.implementation)] : []),
-    ...(snapshot.schemaVersion === 3 ? [`Migrated from snapshot v${snapshot.migration.fromVersion}; original capture time retained.`] : [])
+    ...(snapshot.schemaVersion !== 1 ? [implementationReport(snapshot.implementation, snapshot.schemaVersion)] : []),
+    ...(snapshot.migration ? [`Migrated from snapshot v${snapshot.migration.fromVersion}; original capture time retained.`] : [])
   ].join('\n');
 }
 
@@ -103,6 +108,10 @@ export function diffDocument(before, after) {
   validateSnapshot(after);
   if (before.schemaVersion !== after.schemaVersion) fail('DIFF_VERSION');
   if (before.chainId !== after.chainId || before.address !== after.address || before.source !== after.source) fail('INCOMPARABLE');
+  if (before.schemaVersion === 4) {
+    if (before.genesis.status !== 'observed' || after.genesis.status !== 'observed') fail('GENESIS_UNAVAILABLE');
+    if (before.genesis.hash !== after.genesis.hash) fail('GENESIS_MISMATCH');
+  }
   if (BigInt(after.block.number) < BigInt(before.block.number)) fail('ORDER');
   const changes = [];
   if (before.code !== after.code) changes.push({ field: 'code', before: codeDetails(before.code), after: codeDetails(after.code) });
@@ -123,6 +132,7 @@ export function diffDocument(before, after) {
   return {
     kind: 'contract-watch-diff', schemaVersion: before.schemaVersion,
     chainId: before.chainId, address: before.address, source: before.source,
+    ...(before.schemaVersion === 4 ? { genesis: { status: 'observed', hash: before.genesis.hash } } : {}),
     blocks: {
       before: { number: before.block.number, hash: before.block.hash },
       after: { number: after.block.number, hash: after.block.hash }
@@ -149,16 +159,18 @@ export function compare(before, after) {
   };
 }
 
-function implementationEndpoint(value) {
-  if (value.status === 'not-recorded') return 'not-recorded in source v1; historical address and code unavailable';
+function implementationEndpoint(value, version) {
+  if (value.status === 'not-recorded') return version === 4
+    ? 'not-recorded; saved address provenance and code unavailable'
+    : 'not-recorded in source v1; historical address and code unavailable';
   if (value.status === 'skipped') return `skipped (${value.reason}); address and code unavailable`;
   return `${value.status} | ${value.address} via ${value.via}${value.via === 'beacon' ? ` ${value.beacon}` : ''} | ${codeSummary(value.code)}`;
 }
 
-function implementationDiffReport(value) {
+function implementationDiffReport(value, version) {
   const lines = [
-    `Implementation before: ${implementationEndpoint(value.before)}`,
-    `Implementation after: ${implementationEndpoint(value.after)}`
+    `Implementation before: ${implementationEndpoint(value.before, version)}`,
+    `Implementation after: ${implementationEndpoint(value.after, version)}`
   ];
   if (value.comparison === 'unavailable') {
     return [...lines, [value.before.status, value.after.status].includes('not-recorded')
@@ -182,11 +194,12 @@ export function diffReport(before, after) {
   return [
     `Contract Watch diff | chain ${before.chainId} | ${before.address}`,
     `Source: ${before.source}${before.source === 'synthetic' ? ' (demonstration only)' : ''}`,
+    ...(before.schemaVersion === 4 ? [`Genesis: ${before.genesis.hash} (matching observations; forks can share genesis).`] : []),
     `Blocks: ${BigInt(before.block.number)} -> ${BigInt(after.block.number)}`,
     ...notices,
     ...(changes.length ? changes.map(change => `${implementation ? (change.field === 'code' ? 'Target code' : `Slot ${change.field}`) : change.field}: ${change.before} -> ${change.after}`)
       : [implementation ? 'No target code or EIP-1967 slot changes.' : 'No code or EIP-1967 slot changes.']),
-    ...(implementation ? implementationDiffReport(implementation) : []),
+    ...(implementation ? implementationDiffReport(implementation, before.schemaVersion) : []),
     `Observation: ${observation(after)}`,
     ...(implementation ? ['Observed differences do not prove an upgrade transaction.'] : []),
     'This comparison is not a contract safety assessment.'

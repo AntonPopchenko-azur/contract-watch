@@ -15,7 +15,8 @@ Item 14 adds opt-in live beacon implementation observations on 2026-10-03.
 Item 15 adds separate implementation code observations in opt-in v2 on 2026-10-04.
 Item 16 adds offline v2 implementation comparisons on 2026-10-04.
 Item 17 adds explicit offline snapshot migration to v3 on 2026-10-05.
-Items 18–45 have not started.
+Item 18 adds opt-in genesis identity and strict v4 snapshots on 2026-10-05.
+Items 19–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -111,11 +112,20 @@ There is no worker-owned scheduler or automatic endless backlog.
   refusals remain. Fixtures/tests cover provenance, bounds, links/races/failures,
   offline env/network spies, repeat policy, redaction and inspect/diff. Completed
   2026-10-05.
+- [x] **18 — Chain genesis identity.** Add explicit `--genesis` capture to v4,
+  with two exact block-0 reads, nonzero mined-header validation, final identity
+  recheck and consistency when the selected block is genesis. Preserve all
+  hash-pinned state/canonical/chain checks and default v1/v2 budgets. Strict v4
+  inspect/diff distinguish matching, colliding and unrecorded genesis; unknown
+  or different identity fails without claiming an ordinary contract change.
+  Offline v1/v2/v3-to-v4 migration preserves original observations/timestamps
+  and backup files, adding only not-recorded genesis. Tests cover all selectors,
+  implementation/live beacon modes, bounds, failures, redaction, schema, golden
+  reports, exit policy, migration and atomic output. Document provider/fork trust
+  limits and exact request budgets. Completed 2026-10-05.
 
 ## Planned increments
 
-- [ ] **18 — Chain genesis identity.** Optionally bind snapshots to genesis hash
-  to distinguish networks that reuse chain IDs; test collisions and migrations.
 - [ ] **19 — Local target configuration.** Validate named address/chain entries;
   resolve RPC through environment references without persisting secrets.
 - [ ] **20 — Multi-target one-shot capture.** Add bounded target counts and
