@@ -43,7 +43,7 @@ Display one existing snapshot without connecting to a chain:
 node bin/contract-watch.js inspect examples/before.json
 ```
 
-`inspect FILE` accepts exactly one snapshot v1 or v2 file and no options. It uses the
+`inspect FILE` accepts exactly one snapshot v1, v2 or v3 file and no options. It uses the
 same strict reader and text formatter as capture, displaying source, chain ID,
 address, block number/hash, code size/fingerprint and the three EIP-1967 slots.
 Synthetic inputs are marked `synthetic (demonstration only)`. Large chain IDs
@@ -57,8 +57,8 @@ not an independent verification of its contents. The command ignores
 
 Success exits **0**, with the report on stdout and empty stderr. Invalid JSON,
 unsupported versions, unknown/missing fields, unreadable/non-regular files, and
-files over their version's limit (512 KiB for v1, 768 KiB for v2) fail with exit
-**1**, empty stdout and a fixed safe stderr message. No migration or permissive
+files over their version's limit (512 KiB for v1, 768 KiB for v2/v3) fail with exit
+**1**, empty stdout and a fixed safe stderr message. No automatic migration or permissive
 parsing is performed. Snapshot/diff options
 such as `--rpc`, `--json` and `--exit-code` are rejected; for a filename starting
 with `-`, use a path such as `./-snapshot.json`.
@@ -100,7 +100,8 @@ The flag may appear before, between, or after the two filenames; duplicate or
 unknown flags are rejected. Prefix a filename starting with `--` with `./`.
 Two v2 snapshots produce JSON diff v2 with separate implementation observations
 and changes, as described [below](#compare-saved-implementation-observations).
-Mixed v1/v2 inputs fail with `DIFF_VERSION`; no historical data is inferred.
+Two v3 snapshots produce JSON diff v3, with explicit missing historical data.
+Mixed-version inputs fail with `DIFF_VERSION`; no historical data is inferred.
 
 By default, changed and unchanged comparisons exit **0**, including a comparison
 with a fork/inconsistency notice. On incomparable snapshots, invalid files, or
@@ -112,7 +113,7 @@ check the exit status before parsing stdout. JSON diff is offline and ignores
 For automation, `diff --exit-code` distinguishes observed state changes from an
 unchanged comparison. It works with text output and with `--json`; neither
 report changes. The status is based only on `changed`: target code or raw slot
-changes, plus comparable implementation address/code changes for v2 pairs.
+changes, plus comparable implementation address/code changes for v2/v3 pairs.
 Notices without state changes, such as different hashes at the same height,
 do not produce status 2. Status 2 indicates a completed comparison, not an error
 or proof of an upgrade.
@@ -339,10 +340,10 @@ Empty code is saved as `status: "no-code"`, `code: "0x"`; nonempty code is
 self-reference. Code presence does not establish proxy behavior or safety.
 
 Offline `inspect` displays target and implementation code separately, including
-provenance, skips and no-code observations. Diff accepts two v1 or two v2 files;
-mixed versions fail with `DIFF_VERSION`, exit 1 and empty stdout in text/JSON
-modes. Migration tooling remains roadmap item 17. See the [v2 contract](docs/PROTOCOL.md#file-contract-v2)
-and [compatibility and migration plan](docs/MIGRATION.md) before changing a saved
+provenance, skips and no-code observations. Diff accepts two files of the same
+version (v1, v2 or v3); mixed versions fail with `DIFF_VERSION`, exit 1 and empty
+stdout in text/JSON modes. See the [v2 contract](docs/PROTOCOL.md#file-contract-v2)
+and [migration contract](docs/MIGRATION.md) before changing a saved
 history or a consumer. Old files need no conversion.
 
 ## Compare saved implementation observations
@@ -390,6 +391,50 @@ observations; notices alone do not set `changed` or exit 2. A comparison describ
 saved observations, not proof of an upgrade transaction, intermediate history,
 provider honesty or safety. See the [JSON diff v2 contract](docs/PROTOCOL.md#json-diff-contract-version-2).
 
+## Migrate a saved snapshot offline
+
+Choose the source file, target version and a **new** output path explicitly:
+
+```sh
+node bin/contract-watch.js migrate examples/before.json \
+  --to-version 3 --out snapshots/migrated-v3.json
+node bin/contract-watch.js inspect snapshots/migrated-v3.json
+node bin/contract-watch.js diff --json --exit-code \
+  snapshots/migrated-v3.json snapshots/migrated-v3.json
+```
+
+Create the `snapshots` directory first. Migration supports **v1 → v3 and v2 → v3**
+only. It never reads RPC configuration, makes a request or performs a new capture.
+All existing target code, raw slots, chain/block values, source and `capturedAt`
+are retained. V1 gains only `implementation: {"status":"not-recorded"}`; no
+historical address, code or skip reason is inferred. V2 implementation observations
+are preserved in full. V3 records `migration.fromVersion` as 1 or 2; no migration
+timestamp replaces the capture time. Capture itself still writes v1/v2.
+
+The original file is the backup: its bytes, modification time and permissions
+remain unchanged. No separate backup file is created. Output is private and
+published atomically through the existing no-overwrite writer. Existing files,
+symlinks, hardlinks, in-place paths and concurrent losers are rejected; no partial
+output is published on failure. Use an existing destination directory you control.
+
+Migration exits 0 only after saving, with a fixed confirmation and empty stderr.
+Errors exit 1 with empty stdout and safe stderr. Only the exact target `3` is
+accepted; downgrades, v1-to-v2, aliases and unknown versions are rejected.
+Already-v3 input gives `MIGRATION_CURRENT` without creating output. Repeating
+an old source with the same destination gives `FILE_EXISTS`; explicitly choosing
+another new destination produces the same deterministic migrated content.
+Flags may surround the single source argument; duplicates, missing values and
+capture/diff options are usage errors. Use `./` for a source name starting with `-`.
+
+Inspect v3 identifies missing historical observations. Two v3 files use JSON
+diff v3: any `not-recorded` endpoint makes implementation comparison `unavailable`,
+never empty code or evidence of unchanged implementation. Target/slot changes
+still count normally; available observations use the v2 comparison rules. A
+missing record versus a recorded observation at the same hash is not itself
+inconsistent block data. Mixed versions are still rejected; migrate both inputs
+explicitly to v3 to compare their available data. Older v1/v2 readers reject v3.
+See [migration and backup guarantees](docs/MIGRATION.md) for limits and errors.
+
 ## What a snapshot means
 
 The CLI checks the chain, resolves the requested block, and passes the same
@@ -407,7 +452,7 @@ atomically on filesystems supporting same-directory hard links and use mode
 
 Limits are 1 MiB per ordinary HTTP response, 16 KiB of HTTP headers, and 128 KiB
 of decoded bytes **per** target/implementation code blob. Files are bounded at
-512 KiB for v1 and 768 KiB for v2, including whitespace; v2 can hold both maximum
+512 KiB for v1 and 768 KiB for v2/v3, including whitespace; v2/v3 can hold both maximum
 code blobs. Redirects and compressed responses are rejected.
 Before adding any opt-in reads, successful captures have these bounded
 sequential RPC budgets, where `T` is

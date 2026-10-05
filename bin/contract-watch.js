@@ -3,6 +3,7 @@ import { capture, captureWithBeacon, captureWithImplementation, readSnapshot, sa
 import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
 import { timeout } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
+import { migrateFile } from '../src/migration.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
@@ -10,6 +11,7 @@ Usage:
   contract-watch snapshot --address ADDRESS --chain-id ID --out FILE [options]
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
+  contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -26,7 +28,7 @@ Snapshot options:
                       Cannot combine with --resolve-beacon
 
 Diff options:
-  --json             Version 1 or 2 JSON report on stdout, matching the input pair
+  --json             Version 1, 2 or 3 JSON report on stdout, matching the input pair
   --exit-code        Exit 2 for state changes, 0 without changes, 1 for errors
 
 All state reads use one block hash and require EIP-1898 support.
@@ -34,9 +36,12 @@ Choose at most one of --block, --block-hash or --depth. Depth is not finality.
 Output files are never overwritten. Parent directory must already exist.
 Address validation defaults to 20-byte hex syntax; EIP-55 checking is opt-in.
 Diff is offline. Default exit status: 0 success (including changes), 1 error.
-Diff requires matching snapshot versions; v2 compares available implementation observations.
+Diff requires matching snapshot versions; v2/v3 compare available implementation observations.
 Skipped observations or changed provenance are shown without inferring code changes.
-Inspect is offline and accepts one snapshot v1 or v2 file, no options; exit 0/1.
+Inspect is offline and accepts one snapshot v1, v2 or v3 file, no options; exit 0/1.
+Migrate is offline: v1/v2 to v3 only; original bytes retained as backup, no overwrite.
+V1 migration marks implementation not-recorded; v2 observations are preserved.
+Already-v3 inputs are rejected without output. Capture continues to write v1/v2.
 Beacon results are not saved in v1 files. No safety assessment or complete proxy detection.
 `;
 
@@ -83,12 +88,36 @@ function parseDiff(args) {
   return { json, exitCode, files };
 }
 
+function parseMigration(args) {
+  const options = {};
+  let input;
+  for (let index = 0; index < args.length; index++) {
+    const key = args[index];
+    if (key === '--to-version' || key === '--out') {
+      if (Object.hasOwn(options, key)) fail('USAGE');
+      const value = args[++index];
+      if (!value || value.startsWith('--')) fail('USAGE');
+      options[key] = value;
+    } else {
+      if (!key || key.startsWith('-') || input !== undefined) fail('USAGE');
+      input = key;
+    }
+  }
+  if (!input || !options['--to-version'] || !options['--out']) fail('USAGE');
+  return { input, output: options['--out'], toVersion: options['--to-version'] };
+}
+
 async function main(args) {
   if (args.length === 0 || (args.length === 1 && ['--help', '-h'].includes(args[0]))) {
     process.stdout.write(HELP); return;
   }
   if (args.length === 1 && args[0] === '--version') {
     process.stdout.write('0.1.0\n'); return;
+  }
+  if (args[0] === 'migrate') {
+    await migrateFile(parseMigration(args.slice(1)));
+    process.stdout.write('Snapshot migrated to version 3. Original preserved as backup.\n');
+    return;
   }
   if (args[0] === 'snapshot') {
     const options = parseSnapshot(args.slice(1));

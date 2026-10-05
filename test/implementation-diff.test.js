@@ -200,7 +200,7 @@ test('v2 validation, compatibility, version and read errors are safe in all outp
     ['target', 'INCOMPARABLE', a => { a.address = OTHER; }],
     ['source', 'INCOMPARABLE', a => { a.source = 'rpc'; }],
     ['order', 'ORDER', a => { a.block.number = '0x1'; }],
-    ['unknown version', 'SNAPSHOT', a => { a.schemaVersion = 3; }],
+    ['unknown version', 'SNAPSHOT', a => { a.schemaVersion = 4; }],
     ['unknown root', 'SNAPSHOT', a => { a.rpcUrl = 'https://PRIVATE_KEY'; }],
     ['unknown block', 'SNAPSHOT', a => { a.block.secret = 'PRIVATE_KEY'; }],
     ['unknown slot', 'SNAPSHOT', a => { a.slots.secret = 'PRIVATE_KEY'; }],

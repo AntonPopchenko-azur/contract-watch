@@ -17,7 +17,7 @@ export function observation(snapshot) {
   }
   if (implementation !== ZERO_WORD && beacon !== ZERO_WORD) return 'Both implementation and beacon slots populated; ambiguous evidence.';
   if (implementation !== ZERO_WORD) return 'Implementation slot populated; proxy behavior unverified.';
-  if (beacon !== ZERO_WORD) return snapshot.schemaVersion === 2
+  if (beacon !== ZERO_WORD) return snapshot.implementation && snapshot.implementation.status !== 'not-recorded'
     ? 'Beacon implementation() address observed; proxy behavior unverified.'
     : 'Beacon slot populated; beacon implementation is not resolved.';
   if (admin !== ZERO_WORD) return 'Admin slot only; no EIP-1967 target found.';
@@ -40,6 +40,7 @@ function slotDetails(raw) {
 }
 
 function implementationReport(value) {
+  if (value.status === 'not-recorded') return 'Implementation observation not recorded in source v1; historical address and code are unavailable.';
   if (value.status === 'skipped') return `Implementation code skipped: ${value.reason}.`;
   return [
     `Implementation address: ${value.address} (via ${value.via})`,
@@ -56,17 +57,19 @@ export function snapshotReport(snapshot, { beaconResolution } = {}) {
     `Contract Watch | chain ${snapshot.chainId} | ${snapshot.address}`,
     `Source: ${snapshot.source}${snapshot.source === 'synthetic' ? ' (demonstration only)' : ''}`,
     `Block: ${BigInt(snapshot.block.number)} (${snapshot.block.hash})`,
-    `${snapshot.schemaVersion === 2 ? 'Target code' : 'Code'}: ${codeSummary(codeDetails(snapshot.code))}`,
+    `${snapshot.schemaVersion === 1 ? 'Code' : 'Target code'}: ${codeSummary(codeDetails(snapshot.code))}`,
     ...Object.keys(SLOTS).map(name => `${name}: ${slotValue(snapshot.slots[name])}`),
     beaconResolution?.status === 'resolved'
       ? 'Beacon implementation() returned an address; proxy behavior and implementation code are unverified.'
       : observation(snapshot),
     ...(beaconResolution ? [beaconReport(beaconResolution)] : []),
-    ...(snapshot.schemaVersion === 2 ? [implementationReport(snapshot.implementation)] : [])
+    ...(snapshot.schemaVersion !== 1 ? [implementationReport(snapshot.implementation)] : []),
+    ...(snapshot.schemaVersion === 3 ? [`Migrated from snapshot v${snapshot.migration.fromVersion}; original capture time retained.`] : [])
   ].join('\n');
 }
 
 function implementationDetails(value) {
+  if (value.status === 'not-recorded') return { status: value.status };
   if (value.status === 'skipped') return { status: value.status, reason: value.reason };
   return {
     status: value.status, via: value.via, address: value.address, code: codeDetails(value.code),
@@ -75,7 +78,7 @@ function implementationDetails(value) {
 }
 
 function implementationDiff(before, after) {
-  const comparison = before.status === 'skipped' || after.status === 'skipped' ? 'unavailable'
+  const comparison = [before.status, after.status].some(status => ['skipped', 'not-recorded'].includes(status)) ? 'unavailable'
     : before.via !== after.via || before.beacon !== after.beacon ? 'provenance-changed' : 'comparable';
   const changes = [];
   if (comparison === 'comparable') {
@@ -87,6 +90,8 @@ function implementationDiff(before, after) {
 }
 
 function implementationDiffers(before, after) {
+  // Missing historical observations do not contradict recorded observations at the same hash.
+  if (before.status === 'not-recorded' || after.status === 'not-recorded') return false;
   // Ignore object key order and capture metadata; all fields are strictly validated.
   return ['status', 'reason', 'via', 'address', 'code', 'beacon', 'raw'].some(key => before[key] !== after[key]);
 }
@@ -106,7 +111,7 @@ export function diffDocument(before, after) {
       changes.push({ field: name, before: slotDetails(before.slots[name]), after: slotDetails(after.slots[name]) });
     }
   }
-  const implementation = before.schemaVersion === 2 ? implementationDiff(before.implementation, after.implementation) : undefined;
+  const implementation = before.schemaVersion !== 1 ? implementationDiff(before.implementation, after.implementation) : undefined;
   const observedDifference = implementation && implementationDiffers(before.implementation, after.implementation);
   const notices = [];
   if (before.block.number === after.block.number && before.block.hash !== after.block.hash) {
@@ -145,6 +150,7 @@ export function compare(before, after) {
 }
 
 function implementationEndpoint(value) {
+  if (value.status === 'not-recorded') return 'not-recorded in source v1; historical address and code unavailable';
   if (value.status === 'skipped') return `skipped (${value.reason}); address and code unavailable`;
   return `${value.status} | ${value.address} via ${value.via}${value.via === 'beacon' ? ` ${value.beacon}` : ''} | ${codeSummary(value.code)}`;
 }
@@ -155,7 +161,9 @@ function implementationDiffReport(value) {
     `Implementation after: ${implementationEndpoint(value.after)}`
   ];
   if (value.comparison === 'unavailable') {
-    return [...lines, 'Implementation not compared: one or both observations skipped; missing data is not empty code.'];
+    return [...lines, [value.before.status, value.after.status].includes('not-recorded')
+      ? 'Implementation not compared: historical observation not recorded; missing data is not empty code or evidence of unchanged implementation.'
+      : 'Implementation not compared: one or both observations skipped; missing data is not empty code.'];
   }
   if (value.comparison === 'provenance-changed') {
     return [...lines, 'Implementation not compared: provenance changed (direct/beacon source or beacon address).'];

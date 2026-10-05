@@ -14,7 +14,8 @@ Item 13 adds capture at a fixed depth behind the initial latest head on 2026-10-
 Item 14 adds opt-in live beacon implementation observations on 2026-10-03.
 Item 15 adds separate implementation code observations in opt-in v2 on 2026-10-04.
 Item 16 adds offline v2 implementation comparisons on 2026-10-04.
-Items 17–45 have not started.
+Item 17 adds explicit offline snapshot migration to v3 on 2026-10-05.
+Items 18–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -101,11 +102,18 @@ There is no worker-owned scheduler or automatic endless backlog.
   V1 output remains unchanged; mixed versions still fail with DIFF_VERSION.
   Synthetic examples and independent expected reports document the contract;
   migration tooling remains item 17. Completed 2026-10-04.
+- [x] **17 — Snapshot migration tooling.** Add `migrate SOURCE --to-version 3
+  --out NEW` for offline v1/v2-to-v3 conversion, retaining original bytes/mtime/
+  permissions as backup and publishing only private atomic new files. V1 gains
+  a not-recorded marker; v2 observations and all common capture fields remain
+  intact. Strict v3 validation and JSON diff v3 distinguish missing history from
+  no-code/skips and comparable observations; old formats and mixed-version
+  refusals remain. Fixtures/tests cover provenance, bounds, links/races/failures,
+  offline env/network spies, repeat policy, redaction and inspect/diff. Completed
+  2026-10-05.
 
 ## Planned increments
 
-- [ ] **17 — Snapshot migration tooling.** Supply explicit offline migration for
-  new schema versions, backup behavior and old-version compatibility fixtures.
 - [ ] **18 — Chain genesis identity.** Optionally bind snapshots to genesis hash
   to distinguish networks that reuse chain IDs; test collisions and migrations.
 - [ ] **19 — Local target configuration.** Validate named address/chain entries;

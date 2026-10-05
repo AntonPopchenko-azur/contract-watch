@@ -17,7 +17,8 @@ export const SLOTS = Object.freeze({
 export const ZERO_WORD = `0x${'0'.repeat(64)}`;
 export const MAX_SNAPSHOT_BYTES = 512 * 1024;
 export const MAX_SNAPSHOT_V2_BYTES = 768 * 1024;
-const fileLimit = version => version === 2 ? MAX_SNAPSHOT_V2_BYTES : MAX_SNAPSHOT_BYTES;
+export const MAX_SNAPSHOT_V3_BYTES = MAX_SNAPSHOT_V2_BYTES;
+const fileLimit = version => [2, 3].includes(version) ? MAX_SNAPSHOT_V3_BYTES : MAX_SNAPSHOT_BYTES;
 
 function blockHeader(value) {
   if (value === null) fail('BLOCK_UNAVAILABLE');
@@ -100,10 +101,11 @@ function keys(value, expected) {
 export function validateSnapshot(value) {
   try {
     keys(value, ['schemaVersion', 'source', 'capturedAt', 'chainId', 'address', 'block', 'code', 'slots',
-      ...(value?.schemaVersion === 2 ? ['implementation'] : [])]);
+      ...([2, 3].includes(value?.schemaVersion) ? ['implementation'] : []),
+      ...(value?.schemaVersion === 3 ? ['migration'] : [])]);
     keys(value.block, ['number', 'hash']);
     keys(value.slots, Object.keys(SLOTS));
-    if (![1, 2].includes(value.schemaVersion) || !['rpc', 'synthetic'].includes(value.source) ||
+    if (![1, 2, 3].includes(value.schemaVersion) || !['rpc', 'synthetic'].includes(value.source) ||
         typeof value.capturedAt !== 'string' ||
         !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.capturedAt) ||
         new Date(value.capturedAt).toISOString() !== value.capturedAt ||
@@ -114,6 +116,14 @@ export function validateSnapshot(value) {
       if (data(value.slots[name], 32) !== value.slots[name]) fail('SNAPSHOT');
     }
     if (value.schemaVersion === 2) validateImplementation(value);
+    if (value.schemaVersion === 3) {
+      keys(value.migration, ['fromVersion']);
+      if (value.migration.fromVersion === 1) {
+        keys(value.implementation, ['status']);
+        if (value.implementation.status !== 'not-recorded') fail('SNAPSHOT');
+      } else if (value.migration.fromVersion === 2) validateImplementation(value);
+      else fail('SNAPSHOT');
+    }
     return value;
   } catch { fail('SNAPSHOT'); }
 }
@@ -146,14 +156,14 @@ export async function readSnapshot(path) {
     // Nonblocking open prevents special files such as FIFOs from hanging the CLI.
     file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
     const stat = await file.stat();
-    if (!stat.isFile() || stat.size > MAX_SNAPSHOT_V2_BYTES) fail('FILE_READ');
-    const buffer = Buffer.alloc(MAX_SNAPSHOT_V2_BYTES + 1);
+    if (!stat.isFile() || stat.size > MAX_SNAPSHOT_V3_BYTES) fail('FILE_READ');
+    const buffer = Buffer.alloc(MAX_SNAPSHOT_V3_BYTES + 1);
     while (size < buffer.length) {
       const { bytesRead } = await file.read(buffer, size, buffer.length - size, null);
       if (bytesRead === 0) break;
       size += bytesRead;
     }
-    if (size > MAX_SNAPSHOT_V2_BYTES) fail('FILE_READ');
+    if (size > MAX_SNAPSHOT_V3_BYTES) fail('FILE_READ');
     text = buffer.subarray(0, size).toString('utf8');
   } catch { fail('FILE_READ'); }
   finally { await file?.close().catch(() => {}); }

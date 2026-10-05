@@ -1,72 +1,119 @@
-# Snapshot compatibility and migration plan
+# Snapshot migration and compatibility
 
-Item 15 introduces opt-in snapshot v2, not an in-place change to v1. Default
-capture and `--resolve-beacon` continue writing v1. `--implementation-code`
-writes v2, including explicit skip/no-code states when applicable. Both formats
-have strict required/unknown-field validation. Package version and JSON diff
-schema version are independent of snapshot versions.
-`SNAPSHOT` and `FILE_READ` keep their error codes and safe-output policy; their
-fixed diagnostic text now names both supported versions and their size limits.
+`contract-watch migrate SOURCE.json --to-version 3 --out NEW.json` is an explicit
+offline conversion. Only v1 → v3 and v2 → v3 are supported. The source, target
+version and new output path are required; there is no automatic conversion in
+inspect/diff, version alias, downgrade or lossy v1-to-v2 path. Flags may precede
+or follow the single source. Duplicate, valued-as-equals, missing or unknown
+options are `USAGE`; capture/diff flags are not accepted. Prefix a source name
+beginning with `-` with `./`.
 
-| Producer / consumer | Snapshot v1 | Snapshot v2 |
-| --- | --- | --- |
-| Existing v1 capture modes | Writes v1 | Never writes v2 |
-| `--implementation-code` | Never silently substitutes v1 | Writes v2 |
-| Current `inspect` | Supported, existing report | Supported, separate code/provenance |
-| Current `diff`, text or JSON | Two v1 inputs yield diff v1 | Two v2 inputs yield diff v2; mixed inputs give `DIFF_VERSION` |
-| Earlier v1-only readers | Supported | Reject as unsupported |
+## Data preservation
 
-Keep existing history as v1 and retain originals. No automatic conversion,
-fallback parser, data removal or migration command is introduced here. Adding
-v2 fields to v1, merely changing its version number, or removing implementation
-observations for comparison is not a supported migration. The absence of saved
-implementation code in v1 does not mean empty code, a failed read or a v2 skip.
-Even a prior live beacon report cannot supply a missing historical code read.
+Snapshot v3 keeps the v2 field set and adds exactly
+`migration: {"fromVersion": 1}` or `migration: {"fromVersion": 2}`. Common fields
+retain their exact values: target `code`, all raw `slots`, `chainId`, `address`,
+`block`, `source`, and `capturedAt`. Large integers remain strings. The new file
+uses pretty-printed JSON; the original file's layout is untouched. Migration
+adds no timestamp and never substitutes migration time for capture time.
 
-To obtain a new v2 observation, explicitly recapture with
-`--implementation-code`, the original chain/address and `--block-hash` using
-the original hash, a chosen archive-capable endpoint and a **new filename**.
-The block must still be canonical and available. The tool rechecks all state;
-this is a new RPC observation with a fresh `capturedAt`, not a conversion of the
-old file. Do not copy the old timestamp, invent missing results, merge data from
-different blocks/providers or silently replace the old snapshot. If recapture
-fails, retain v1; there is no fallback to latest or to an invented v2 observation.
+For v1 input, the only implementation field is
+`implementation: {"status":"not-recorded"}`. This applies even when raw slots
+contain a direct address, a beacon, ambiguous or noncanonical words, or target
+code is empty. V1 did not record implementation observations. Its absence cannot
+be converted into empty implementation code, a failed read, an observed address
+or a v2 skip. A past live-only beacon report supplies no saved code observation.
+Migration never reads RPC environment variables or calls a provider to fill gaps.
 
-Item 16 adds implementation-aware comparisons for two v2 snapshots. The output
-is explicitly JSON diff v2; consumers must select by `kind` and `schemaVersion`.
-Unlike diff v1, `changed` considers both top-level target/slot `changes` and the
-separate `implementation.changes` array. Both implementation observations are
-retained in summarized form, with `comparison` marking comparable, unavailable
-or changed provenance. Only available observations sharing direct-slot provenance
-or the same beacon address get address/code change entries. Skips or changed
-provenance do not invent code differences. V1 JSON/text output, notice codes and
-exit policy remain unchanged. The earlier item 15 prohibition on all v2 diffs
-is replaced by the documented [v2 comparison contract](PROTOCOL.md#json-diff-contract-version-2).
+For v2 input, the entire implementation object is copied without semantic
+changes: direct/beacon provenance, address, code, raw return, no-code and skip
+states. V3 binds the missing marker to `fromVersion: 1`; `fromVersion: 2`
+requires a valid v2 implementation observation, with all existing eligibility
+and raw-slot/ABI consistency checks. V1/v2 validators remain strict, and neither
+accepts v3 fields or its missing marker. Migration metadata is a file assertion,
+not independent authentication of its history or provider.
 
-Mixed-version pairs still fail safely with `DIFF_VERSION`, in both directions
-and all output/exit modes. Its fixed diagnostic now describes the same-version
-requirement. There is no flag to discard v2 fields or infer missing v1 data.
-No existing snapshot or JSON diff file is rewritten as part of this change.
+## Original as backup; atomic output
 
-Item 17 must define an explicit offline migration operation with
-backup/no-overwrite behavior, output version negotiation, fixtures and handling
-of unavailable observations. V2 currently has no `unknown historical data`
-state, so a universal offline v1-to-v2 conversion is not defined. That work may
-need another format version rather than fabricating observations or weakening
-v2 validation. Migration tooling is not implemented by item 16.
+The **source itself is the retained backup**. Migration opens it read-only and
+does not rename, truncate, reformat, chmod or replace it. Original bytes, mtime
+and permissions are unchanged; access time may change through normal reading.
+No secondary backup is needed because there is no in-place update.
 
-Compatibility specimens under [test/fixtures/implementation](../test/fixtures/implementation/)
-are synthetic, created for these tests; their addresses, hashes and code are
-invented and their timestamps record fixture generation. They include unchanged
-[v1](../test/fixtures/implementation/v1.json),
-[direct v2](../test/fixtures/implementation/direct-v2.json),
-[beacon v2](../test/fixtures/implementation/beacon-v2.json),
-[no-code v2](../test/fixtures/implementation/no-code-v2.json) and
-[skipped v2](../test/fixtures/implementation/skipped-v2.json). Tests verify strict
-read/inspect, invalid provenance, mixed-version diff rejection, independent code
-limits, per-version file limits and private atomic no-overwrite persistence.
-Existing v1 examples and golden diff output remain unchanged.
-The new [before](../examples/beacon-before-v2.json)/[after](../examples/beacon-after-v2.json)
-pair and [v2 diff fixtures](../test/fixtures/json-diff-v2/) are also synthetic,
-generated on 2026-10-04. They demonstrate a changed implementation behind an
-unchanged beacon, without treating the report as proof of an upgrade transaction.
+The output must use a new path in an existing directory. Equal normalized paths
+are rejected as `MIGRATION_PATH` before reading. Other aliases (symlinked parents,
+symlinks or hardlinks) are protected by the writer's atomic no-overwrite publish:
+any existing destination produces `FILE_EXISTS`. This also rejects directories,
+FIFOs and dangling symlinks without following or modifying them. A source symlink
+to a regular file is accepted; its target remains unchanged. Source directories,
+FIFOs, missing paths, broken links and unreadable files give `FILE_READ`.
+
+Output is serialized and bounded before opening a same-directory private
+temporary file (`0600` on POSIX), written, synced and closed, then published with
+an atomic hard link. Concurrent writers have exactly one winner; losers fail
+without replacing the complete winner or changing the source. Normal failure
+cleans up temporary files. A process crash can leave a dot-prefixed temporary
+file; directory durability across power loss and hostile concurrent replacement
+of source/parent paths are not guaranteed. Use a local directory you control.
+The tool neither locks nor independently authenticates externally edited files.
+
+Input limits remain 512 KiB for v1 and 768 KiB for v2/v3, including whitespace
+and actual bytes read. Code remains capped at 128 KiB per target/implementation
+blob. V3 output is capped at 768 KiB; both maximum code blobs plus metadata fit.
+Oversize/invalid input or write failure produces no new successful output or
+partial stdout. On success, stdout is the fixed line
+`Snapshot migrated to version 3. Original preserved as backup.` and stderr is
+empty (exit 0). Errors are fixed safe stderr only (exit 1), without paths,
+input values, RPC/provider text or stack traces.
+
+## Negotiation and repeat behavior
+
+| Condition | Result |
+| --- | --- |
+| Valid v1/v2, target exactly `3`, unused path | New validated v3, original retained |
+| Target `1`, `2`, unknown version, `03`, `3.0`, `latest` | `MIGRATION_VERSION` before file I/O |
+| Valid v3 input, target `3` | `MIGRATION_CURRENT`; no output or rewrite |
+| Same normalized input/output path | `MIGRATION_PATH`; no in-place operation |
+| Repeat old source and existing output | `FILE_EXISTS`; no overwrite |
+| Repeat old source with another explicit new name | Deterministic identical migrated data |
+| Malformed/unknown source format or fields | `SNAPSHOT` (or `FILE_READ` for size/read failures) |
+
+Parsing and target validation precede path validation, source read/validation,
+the already-current check, and writing. No permissions or credentials are changed.
+Programmatic `migrateSnapshot(snapshot, '3')` returns an independent validated
+object; `migrateFile({input, output, toVersion: '3'})` uses the same conversion
+and bounded atomic persistence. These functions do not query the environment.
+
+## Reader and comparison compatibility
+
+| Operation | v1 | v2 | v3 |
+| --- | --- | --- | --- |
+| Default capture / live-only beacon | Writes v1 | — | — |
+| Capture `--implementation-code` | — | Writes v2 | — |
+| Current inspect | Supported | Supported | Supported, including not-recorded |
+| Current diff with matching inputs | JSON diff v1 | JSON diff v2 | JSON diff v3 |
+| Current migrate to 3 | Supported | Supported | Explicit already-current error |
+| Older v1/v2 readers | Supported per reader version | Supported by v2 readers | Reject unsupported version |
+
+All **mixed snapshot-version pairs** still fail with `DIFF_VERSION`, including
+v1/v3 and v2/v3. Explicitly migrating both inputs to v3 lets a recorded v2
+observation coexist with a missing v1 observation without inventing data. V3/v3
+diff uses `schemaVersion: 3`; consumers must check `kind` and version. Its shape
+matches JSON diff v2 except for the additional `not-recorded` endpoint state.
+Available observations retain the v2 comparability rules; any missing/skipped
+endpoint yields `comparison: "unavailable"` and no implementation change entries.
+`changed` still counts target/slot changes and comparable implementation address/
+code changes only. Two missing records do not mean unchanged implementation.
+Absence of a record versus a recorded observation at one hash is not itself an
+inconsistency; actual target differences and contradictions between recorded
+observations still produce existing notices. Migration metadata is not chain
+state and does not enter diff. See the [v3 contract](PROTOCOL.md#json-diff-contract-version-3).
+
+V1/v2 snapshot semantics and successful inspect/diff output, notice codes and
+exit policies remain unchanged. Only the fixed `SNAPSHOT`/`FILE_READ` diagnostic
+text is expanded to name v3; their codes and safe-output policy remain. Earlier
+[v1](../test/fixtures/json-diff/) and [v2](../test/fixtures/json-diff-v2/) golden
+diff fixtures remain unchanged. [Migration fixtures](../test/fixtures/migration/)
+are synthetic, generated on 2026-10-05, with v1 raw-slot variants/large integers,
+all v2 observation states and expected v3 files. Their timestamps record source
+fixture generation and are retained in expected migration outputs.

@@ -1,0 +1,289 @@
+{
+  "generatedAt": "2026-10-05T08:07:22.190Z",
+  "cases": [
+    {
+      "name": "v1-empty-slots",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "name": "v1-no-target-code",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x",
+        "slots": {
+          "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "name": "v1-implementation",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "name": "v1-admin",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "admin": "0x0000000000000000000000002222222222222222222222222222222222222222",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "name": "v1-beacon",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    },
+    {
+      "name": "v1-ambiguous",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    },
+    {
+      "name": "v1-noncanonical-implementation",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0100000000000000000000000000000000000000000000000000000000000000",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "name": "v1-noncanonical-admin",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "admin": "0x0100000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "name": "v1-noncanonical-beacon",
+      "source": {
+        "schemaVersion": 1,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+          "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0100000000000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    },
+    {
+      "name": "v2-direct",
+      "source": {
+        "schemaVersion": 2,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "1",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0x64",
+          "hash": "0xabababababababababababababababababababababababababababababababab"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "implementation": {
+          "status": "observed",
+          "via": "implementation-slot",
+          "address": "0x2222222222222222222222222222222222222222",
+          "code": "0x60016002"
+        }
+      }
+    },
+    {
+      "name": "v2-beacon",
+      "source": {
+        "schemaVersion": 2,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "1",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0x64",
+          "hash": "0xabababababababababababababababababababababababababababababababab"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "implementation": {
+          "status": "observed",
+          "via": "beacon",
+          "address": "0x2222222222222222222222222222222222222222",
+          "code": "0x60016002",
+          "beacon": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "raw": "0x0000000000000000000000002222222222222222222222222222222222222222"
+        }
+      }
+    },
+    {
+      "name": "v2-no-code",
+      "source": {
+        "schemaVersion": 2,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "1",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0x64",
+          "hash": "0xabababababababababababababababababababababababababababababababab"
+        },
+        "code": "0x60006000",
+        "slots": {
+          "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "implementation": {
+          "status": "no-code",
+          "via": "implementation-slot",
+          "address": "0x2222222222222222222222222222222222222222",
+          "code": "0x"
+        }
+      }
+    },
+    {
+      "name": "v2-skipped",
+      "source": {
+        "schemaVersion": 2,
+        "source": "synthetic",
+        "capturedAt": "2026-10-05T08:07:22.190Z",
+        "chainId": "1",
+        "address": "0x1111111111111111111111111111111111111111",
+        "block": {
+          "number": "0x64",
+          "hash": "0xabababababababababababababababababababababababababababababababab"
+        },
+        "code": "0x",
+        "slots": {
+          "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+          "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "implementation": {
+          "status": "skipped",
+          "reason": "NO_TARGET_CODE"
+        }
+      }
+    }
+  ]
+}

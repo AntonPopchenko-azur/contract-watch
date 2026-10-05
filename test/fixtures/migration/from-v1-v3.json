@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 3,
+  "source": "synthetic",
+  "capturedAt": "2026-10-05T08:07:22.190Z",
+  "chainId": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+  "address": "0x1111111111111111111111111111111111111111",
+  "block": {
+    "number": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe",
+    "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "code": "0x60006000",
+  "slots": {
+    "implementation": "0x0000000000000000000000002222222222222222222222222222222222222222",
+    "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "implementation": {
+    "status": "not-recorded"
+  },
+  "migration": {
+    "fromVersion": 1
+  }
+}

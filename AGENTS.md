@@ -47,14 +47,18 @@ GitHub release page. Never replace an existing published tag.
   detected. `--resolve-beacon` remains live-only and writes strict v1.
   `--implementation-code` explicitly writes v2 with separate implementation code
   and validated address provenance; preserve raw words and strict unknown-field
-  checks for both versions. Its dedicated beacon
+  checks for every version. Its dedicated beacon
   implementation() call is hash-pinned, limited to 100000 gas, 4 KiB and at most
   5 seconds, with no generic eth_call access. Both code blobs are bounded at
-  128 KiB each; files at 512 KiB for v1 and 768 KiB for v2. Diff requires matching
+  128 KiB each; files at 512 KiB for v1 and 768 KiB for v2/v3. Diff requires matching
   snapshot versions: preserve v1 output; v2 uses JSON diff v2 and separately
   compares available implementation observations with the same provenance.
   Skips/provenance changes must not fabricate address/code changes. Mixed versions
-  remain DIFF_VERSION errors. Migration tooling is separate; follow docs/MIGRATION.md.
+  remain DIFF_VERSION errors. Offline migration only converts v1/v2 to v3 at a new
+  path, retaining the original as backup. V1 gains only not-recorded; v2 retains
+  its complete observation. Strict v3 migration provenance binds those states.
+  V3 diff uses JSON diff v3; missing observations are unavailable, not unchanged,
+  empty code or same-hash contradictions. Follow docs/MIGRATION.md; no RPC in migration.
 - For each functional change, add meaningful regression/protocol/file tests and
   document user-visible behavior. Run `npm test` and `npm run demo` as appropriate.
   Tests use local fake RPC and temporary directories, without keys or external
