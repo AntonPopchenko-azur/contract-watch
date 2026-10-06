@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "targets": [
+    {
+      "name": "demo-main",
+      "address": "0x1111111111111111111111111111111111111111",
+      "chainId": "1",
+      "rpcEnv": "CONTRACT_WATCH_DEMO_RPC"
+    },
+    {
+      "name": "demo-secondary",
+      "address": "0x2222222222222222222222222222222222222222",
+      "chainId": "0x2",
+      "rpcEnv": "CONTRACT_WATCH_SECONDARY_RPC"
+    }
+  ]
+}

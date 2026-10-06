@@ -1,5 +1,9 @@
 const messages = {
   USAGE: 'Invalid command or options. Run contract-watch --help.',
+  CONFIG_READ: 'Cannot read a stable regular configuration file (maximum 16 KiB).',
+  CONFIG: 'Invalid configuration; expected the strict version 1 target format.',
+  CONFIG_TARGET: 'Selected target name is invalid or is not defined in the configuration.',
+  CONFIG_ENV: 'Selected RPC environment reference is missing, empty or not a valid HTTP(S) endpoint.',
   ADDRESS: 'Address must be 0x followed by exactly 40 hexadecimal digits.',
   ADDRESS_CHECKSUM: 'Address must use its exact EIP-55 checksum casing.',
   CHAIN_ID: 'Chain ID must be a positive decimal or hexadecimal integer of at most 256 bits.',

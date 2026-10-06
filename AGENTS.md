@@ -65,6 +65,12 @@ GitHub release page. Never replace an existing published tag.
   fromVersion. V4 diff requires matching observed genesis, rejecting unknown or
   different hashes as identity errors. Matching genesis is not proof of ancestry,
   uniqueness or honesty. Follow docs/MIGRATION.md; no RPC in migration.
+- Local config selects exactly one target using --config/--target together;
+  never add implicit discovery, .env loading, interpolation, override precedence
+  or RPC fallback. Follow docs/CONFIGURATION.md: bounded strict read, validate all
+  entries and selected capture input before reading only its rpcEnv. Preserve
+  original address casing for checksum validation. No name/config/env reference
+  or endpoint enters snapshots/reports. Multi-target capture remains item 20.
 - For each functional change, add meaningful regression/protocol/file tests and
   document user-visible behavior. Run `npm test` and `npm run demo` as appropriate.
   Tests use local fake RPC and temporary directories, without keys or external

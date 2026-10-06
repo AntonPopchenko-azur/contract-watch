@@ -16,7 +16,8 @@ Item 15 adds separate implementation code observations in opt-in v2 on 2026-10-0
 Item 16 adds offline v2 implementation comparisons on 2026-10-04.
 Item 17 adds explicit offline snapshot migration to v3 on 2026-10-05.
 Item 18 adds opt-in genesis identity and strict v4 snapshots on 2026-10-05.
-Items 19–45 have not started.
+Item 19 adds explicit single-target local configuration on 2026-10-06.
+Items 20–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -124,10 +125,18 @@ There is no worker-owned scheduler or automatic endless backlog.
   reports, exit policy, migration and atomic output. Document provider/fork trust
   limits and exact request budgets. Completed 2026-10-05.
 
+- [x] **19 — Local target configuration.** Add explicit --config/--target
+  selection of one named address/chain/environment reference, with no overrides,
+  discovery, interpolation or fallback. Strict bounded UTF-8 JSON validates all
+  1–32 entries, unique names/keys, depth and byte limits before reading only the
+  selected RPC variable. Preserve original checksum casing, all capture modes,
+  exact request traces, snapshot formats and offline behavior. Tests cover
+  malformed/unused entries, env ordering, special files/races/cleanup, uint256
+  IDs, redaction, unchanged config and capture failures. Document the contract
+  and provide a secret-free example. Completed 2026-10-06.
+
 ## Planned increments
 
-- [ ] **19 — Local target configuration.** Validate named address/chain entries;
-  resolve RPC through environment references without persisting secrets.
 - [ ] **20 — Multi-target one-shot capture.** Add bounded target counts and
   explicit per-target outcomes; test partial failures and deterministic output.
 - [ ] **21 — Shared block across targets.** Resolve one block per chain for a

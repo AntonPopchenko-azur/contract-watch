@@ -153,7 +153,7 @@ case "$diff_status" in
 esac
 ```
 
-`--rpc URL` overrides `CONTRACT_WATCH_RPC_URL`. Prefer the environment variable for
+Without config, `--rpc URL` overrides `CONTRACT_WATCH_RPC_URL`. Prefer the environment variable for
 key-bearing URLs so the URL is not in CLI arguments; environment variables still
 need to be handled carefully by your shell and process supervisor. The program
 does not load `.env` files. HTTP is useful for local nodes; use HTTPS for remote
@@ -162,9 +162,11 @@ credentials and fragments are rejected. The CLI never prints or stores the URL.
 
 | Option | Meaning |
 | --- | --- |
-| `--address ADDRESS` | Required `0x` plus 40 hex digits; normalized to lowercase |
-| `--chain-id ID` | Required positive decimal or hex integer, up to 256 bits; checked against RPC |
+| `--address ADDRESS` | Required without config: `0x` plus 40 hex digits; normalized to lowercase |
+| `--chain-id ID` | Required without config: positive decimal or hex integer, up to 256 bits; checked against RPC |
 | `--out FILE` | Required new snapshot path in an existing directory |
+| `--config FILE` | Explicit bounded local JSON config; requires `--target`, forbids address/chain/rpc overrides |
+| `--target NAME` | Select exactly one config definition; no implicit first target |
 | `--rpc URL` | Explicit HTTP(S) RPC, or use `CONTRACT_WATCH_RPC_URL` |
 | `--block BLOCK` | `latest` by default; `safe`, `finalized`, decimal or hex block number also accepted |
 | `--block-hash HASH` | Exact `0x` plus 64 hex digits; canonical block only |
@@ -266,6 +268,61 @@ Diff takes two files, with the earlier block first. Both must have the same
 address, chain ID, and source kind. Without `--exit-code`, status is **0 for
 success, including a diff with changes**. Errors use status **1** and stable
 codes and fixed messages; URLs, paths, remote error text, and stacks are omitted.
+
+## Select one local target
+
+For repeated captures, keep public target definitions in an explicit local JSON
+file and select exactly one name:
+
+```sh
+node bin/contract-watch.js snapshot --config examples/targets.json \
+  --target demo-main --out snapshots/configured.json --block finalized
+```
+
+Set `CONTRACT_WATCH_DEMO_RPC` in your process environment to your chosen endpoint
+first, and create the output directory. The [example config](examples/targets.json)
+contains two invented definitions; only `demo-main` is captured. Its format is:
+
+```json
+{
+  "schemaVersion": 1,
+  "targets": [
+    {
+      "name": "demo-main",
+      "address": "0x1111111111111111111111111111111111111111",
+      "chainId": "1",
+      "rpcEnv": "CONTRACT_WATCH_DEMO_RPC"
+    }
+  ]
+}
+```
+
+Config and target flags are required together. They reject **all** address,
+chain-ID and RPC CLI overrides. There is no implicit first target, config search,
+`.env` loading, interpolation or fallback endpoint. In config mode only the
+selected `rpcEnv` value is read; the default `CONTRACT_WATCH_RPC_URL` has no
+special precedence. Missing/invalid selected values fail with `CONFIG_ENV` and
+empty stdout; unused variables are not read. Never put URLs or tokens in this file.
+
+The strict config allows 1–32 targets and at most 16 KiB of UTF-8 without BOM.
+All entries, including unused ones, must have exactly `name`, `address`,
+`chainId`, `rpcEnv`. Names are unique lowercase ASCII letters/digits/hyphens,
+starting with a letter, at most 64 characters. Environment names use uppercase
+ASCII letters/digits/underscores, starting with a letter or underscore, at most
+64 characters. Chain IDs must be exact strings, not JSON numbers. Unknown fields,
+duplicate JSON keys, malformed encoding and deep nesting are rejected.
+
+The config and selected capture options are validated before the selected RPC
+variable is read. `--strict-checksum` checks the selected address's **original
+casing**. Block/hash/depth, genesis and implementation/live-beacon modes keep
+all existing conflicts, read budgets and final checks. Config adds no requests
+or snapshot fields, and successful reports match direct capture. The file is
+read-only; bytes, mtime and permissions stay unchanged. Existing output files,
+including the config itself, cannot be overwritten.
+
+Offline commands reject these flags and never read config/env/network. Without
+config, existing CLI behavior remains. See the [complete config contract](docs/CONFIGURATION.md)
+for file/race limits, validation order, errors and examples.
 
 ## Observe a beacon implementation
 

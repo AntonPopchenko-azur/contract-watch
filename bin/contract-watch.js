@@ -4,11 +4,13 @@ import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
 import { timeout } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
 import { migrateFile } from '../src/migration.js';
+import { configuredCapture } from '../src/config.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
 Usage:
   contract-watch snapshot --address ADDRESS --chain-id ID --out FILE [options]
+  contract-watch snapshot --config FILE --target NAME --out FILE [options]
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
@@ -16,6 +18,9 @@ Usage:
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
+  --config FILE       Explicit local JSON target configuration, at most 16 KiB
+  --target NAME       Select exactly one named target; requires --config
+                      No --address/--chain-id/--rpc overrides; selected rpcEnv only
   --block BLOCK       latest (default), safe, finalized, decimal or hex number
   --block-hash HASH   Exact 32-byte block hash
   --depth N           N blocks behind the initial latest head (0 means that head)
@@ -36,6 +41,8 @@ Diff options:
 All state reads use one block hash and require EIP-1898 support.
 Choose at most one of --block, --block-hash or --depth. Depth is not finality.
 Output files are never overwritten. Parent directory must already exist.
+Config validates all 1-32 targets before reading the selected RPC environment value.
+No config discovery, .env loading, interpolation or fallback endpoint.
 Address validation defaults to 20-byte hex syntax; EIP-55 checking is opt-in.
 Diff is offline. Default exit status: 0 success (including changes), 1 error.
 Diff requires matching snapshot versions; v2/v3/v4 compare available implementation observations.
@@ -52,7 +59,7 @@ Beacon results are not saved in v1 files. No safety assessment or complete proxy
 function parseSnapshot(args) {
   const allowed = new Set([
     '--address', '--chain-id', '--out', '--rpc', '--block', '--block-hash', '--depth', '--timeout-ms',
-    '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis'
+    '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis', '--config', '--target'
   ]);
   const options = {};
   for (let index = 0; index < args.length; index++) {
@@ -66,7 +73,11 @@ function parseSnapshot(args) {
     if (!value || value.startsWith('--')) fail('USAGE');
     options[key] = value;
   }
-  if (!options['--address'] || !options['--chain-id'] || !options['--out']) fail('USAGE');
+  if (!options['--out']) fail('USAGE');
+  if (options['--config'] || options['--target']) {
+    if (!options['--config'] || !options['--target'] ||
+        ['--address', '--chain-id', '--rpc'].some(key => Object.hasOwn(options, key))) fail('USAGE');
+  } else if (!options['--address'] || !options['--chain-id']) fail('USAGE');
   if (options['--resolve-beacon'] && options['--implementation-code']) fail('USAGE');
   if (['--block', '--block-hash', '--depth'].filter(key => Object.hasOwn(options, key)).length > 1) fail('USAGE');
   return options;
@@ -125,14 +136,16 @@ async function main(args) {
   }
   if (args[0] === 'snapshot') {
     const options = parseSnapshot(args.slice(1));
-    const captureOptions = {
-      rpcUrl: options['--rpc'] ?? process.env.CONTRACT_WATCH_RPC_URL,
-      address: options['--address'], chainId: options['--chain-id'],
+    const selectedOptions = {
       block: options['--block'], blockHash: options['--block-hash'], depth: options['--depth'],
       timeoutMs: timeout(options['--timeout-ms']),
       strictChecksum: options['--strict-checksum'] ?? false,
       genesis: options['--genesis'] ?? false
     };
+    const captureOptions = options['--config']
+      ? await configuredCapture(options['--config'], options['--target'], selectedOptions)
+      : { ...selectedOptions, rpcUrl: options['--rpc'] ?? process.env.CONTRACT_WATCH_RPC_URL,
+        address: options['--address'], chainId: options['--chain-id'] };
     const { snapshot, beaconResolution } = options['--implementation-code']
       ? { snapshot: await captureWithImplementation(captureOptions) }
       : options['--resolve-beacon']

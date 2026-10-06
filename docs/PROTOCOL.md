@@ -1,5 +1,24 @@
 # Protocol and snapshot formats
 
+## Local target selection
+
+`snapshot --config FILE --target NAME --out NEW` resolves exactly one definition
+from a strict version 1 config; it does not add a new snapshot or diff format.
+The [configuration contract](CONFIGURATION.md) defines all fields and limits:
+16 KiB UTF-8, 1–32 entries, depth 3, unique names and JSON keys, exact string
+chain IDs and environment references only. All entries and selected capture
+options are checked before the selected environment value is read once.
+Address/chain/rpc CLI overrides are forbidden with config; no fallback or
+implicit target is selected. Original selected address casing reaches checksum
+validation. Offline commands reject config flags without reading configuration.
+
+Config adds zero RPC requests or request deadlines. After resolution the same
+capture engine and protocol sequence below apply, including every hash-pinned
+read and final canonical/chain/genesis check. Saved v1/v2/v4 objects and successful
+reports contain no configuration metadata or endpoint. Direct CLI behavior is
+preserved. Config failures use fixed CONFIG_READ/CONFIG/CONFIG_TARGET/CONFIG_ENV
+messages, exit 1, empty stdout and no new output file.
+
 ## Address checksum
 
 `snapshot --strict-checksum` opts into exact

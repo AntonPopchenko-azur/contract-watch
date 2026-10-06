@@ -49,6 +49,20 @@ export function depth(value) {
   return number;
 }
 
+// Shared by capture and config selection so local options can be checked before
+// resolving a secret-bearing environment value. Preserve original address casing.
+export function captureInput({ address: inputAddress, chainId: expectedChain,
+  block, blockHash: inputHash, depth: inputDepth, strictChecksum = false, genesis = false }) {
+  if (typeof genesis !== 'boolean') fail('USAGE');
+  if ([block, inputHash, inputDepth].filter(value => value !== undefined).length > 1) fail('USAGE');
+  const target = address(inputAddress, { strictChecksum });
+  const expected = chainId(expectedChain);
+  const hash = inputHash === undefined ? undefined : blockHash(inputHash);
+  const distance = inputDepth === undefined ? undefined : depth(inputDepth);
+  const tag = hash === undefined ? blockTag(block) : undefined;
+  return { target, expected, hash, distance, tag };
+}
+
 export function quantity(value) {
   if (typeof value !== 'string' || !/^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$/.test(value)) fail('RPC_DATA');
   return value.toLowerCase();

@@ -2,7 +2,7 @@ import { open, link, unlink } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, basename, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { address, chainId, blockTag, blockHash, depth, quantity, data } from './validate.js';
+import { address, chainId, captureInput, quantity, data } from './validate.js';
 import { fail } from './errors.js';
 import { createRpc } from './rpc.js';
 import { resolveBeacon, decodeBeaconResult } from './beacon.js';
@@ -47,18 +47,9 @@ export async function captureWithImplementation(options) {
   return (await captureObservation(options, false, true)).snapshot;
 }
 
-async function captureObservation({
-  rpcUrl, address: inputAddress, chainId: expectedChain,
-  block, blockHash: inputHash, depth: inputDepth, timeoutMs = 10000, strictChecksum = false,
-  genesis = false
-}, includeBeacon, includeImplementation = false) {
-  if (typeof genesis !== 'boolean') fail('USAGE');
-  if ([block, inputHash, inputDepth].filter(value => value !== undefined).length > 1) fail('USAGE');
-  const target = address(inputAddress, { strictChecksum });
-  const expected = chainId(expectedChain);
-  const hash = inputHash === undefined ? undefined : blockHash(inputHash);
-  const distance = inputDepth === undefined ? undefined : depth(inputDepth);
-  const tag = hash === undefined ? blockTag(block) : undefined;
+async function captureObservation(options, includeBeacon, includeImplementation = false) {
+  const { rpcUrl, timeoutMs = 10000, genesis = false } = options;
+  const { target, expected, hash, distance, tag } = captureInput(options);
   const rpc = createRpc(rpcUrl, timeoutMs);
   const actual = BigInt(quantity(await rpc('eth_chainId'))).toString();
   if (actual !== expected) fail('CHAIN_MISMATCH');
