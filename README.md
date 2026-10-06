@@ -324,6 +324,60 @@ Offline commands reject these flags and never read config/env/network. Without
 config, existing CLI behavior remains. See the [complete config contract](docs/CONFIGURATION.md)
 for file/race limits, validation order, errors and examples.
 
+## Capture an explicit batch
+
+Use the same config to select 1–32 unique targets in a chosen order. Set only the
+selected environment references to your intended RPC endpoints, then choose a
+**new directory** in an existing parent:
+
+```sh
+node bin/contract-watch.js snapshot-many --config examples/targets.json \
+  --target demo-secondary --target demo-main --out-dir snapshots/run-001
+node bin/contract-watch.js inspect snapshots/run-001/target-01.json
+```
+
+This example contains no endpoint or secret and uses the existing invented
+[definitions](examples/targets.json). `target-01.json` belongs to the first
+selection, `target-02.json` to the second. No config names enter filenames,
+snapshots or reports. Duplicate/unknown selections, invalid unused definitions,
+invalid capture input and option conflicts stop the whole run before RPC or
+output creation. Existing output directories/files/links are refused before RPC.
+
+`--target` alone is repeatable. `--config` and `--out-dir` are mandatory;
+address/chain/RPC overrides, `--out`, implicit all-target selection, `--json`
+and `--exit-code` are rejected. Common block/hash/depth, timeout, checksum,
+genesis and implementation/live-beacon options retain their existing meanings.
+All selected inputs are validated before any selected RPC variable is read.
+Unused variables are never read; each selected variable is resolved at its turn.
+Missing/invalid env, RPC/recheck and file-write errors are per-target outcomes.
+
+Targets run sequentially and independently. Each resolves its own block and
+runs all existing state reads/rechecks; even two targets on the same chain can
+capture different heads. No common block/time, concurrency or retries are implied.
+Per-target request budgets are unchanged; the run's budget is their sum.
+
+The final stdout is always a versioned JSON **batch report** when target attempts
+finish: `kind: "contract-watch-batch"`, `schemaVersion: 1`, selected/saved/failed
+counts and ordered `outcomes`. Each outcome has ordinal, normalized address,
+exact expected chain ID and status. Saved outcomes include the fixed filename,
+snapshot version and block; failed outcomes contain a fixed safe code/message.
+Live beacon observations appear only in successful report entries, never files.
+No path, config name, environment reference, RPC URL or raw provider error is
+included. See the [exact report contract](docs/CONFIGURATION.md#batch-report-v1-and-exit-policy).
+
+Exit **0** means all selected files were saved; **1** means a global failure or
+at least one failed target. Per-target failures still produce the JSON report
+with empty stderr; global failures produce empty stdout and safe stderr. Batch
+never uses diff's exit 2. Check stdout and status before parsing.
+
+The set is **not atomic**: successful files remain after later failures, failed
+ordinals leave gaps, and later targets continue. Even an all-failure run keeps
+its empty directory. Individual files retain private atomic no-overwrite writes;
+a repeat needs another explicit new directory. A crash/interruption can leave
+partial results without a final report. Each saved file remains ordinary
+snapshot v1/v2/v4, usable with the existing offline inspect/diff/migrate commands.
+The single `snapshot` command remains unchanged. See [batch guarantees and limits](docs/CONFIGURATION.md#sequential-one-shot-batch-capture).
+
 ## Observe a beacon implementation
 
 Add the valueless `--resolve-beacon` flag to a snapshot command to observe the

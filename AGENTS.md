@@ -65,12 +65,19 @@ GitHub release page. Never replace an existing published tag.
   fromVersion. V4 diff requires matching observed genesis, rejecting unknown or
   different hashes as identity errors. Matching genesis is not proof of ancestry,
   uniqueness or honesty. Follow docs/MIGRATION.md; no RPC in migration.
-- Local config selects exactly one target using --config/--target together;
+- Single snapshot config selects exactly one target using --config/--target together;
   never add implicit discovery, .env loading, interpolation, override precedence
   or RPC fallback. Follow docs/CONFIGURATION.md: bounded strict read, validate all
   entries and selected capture input before reading only its rpcEnv. Preserve
   original address casing for checksum validation. No name/config/env reference
-  or endpoint enters snapshots/reports. Multi-target capture remains item 20.
+  or endpoint enters snapshots/reports. snapshot-many explicitly selects 1–32
+  unique names in order, validates all before env/output, and exclusively creates
+  a new private directory. Capture/save sequentially with independent block and
+  final checks; no shared block, concurrency, retries or rollback. Missing env,
+  RPC and write failures are per-target safe JSON outcomes; preserve successes,
+  ordinal filenames and old snapshot formats. Batch exit 0 only for all saved,
+  otherwise 1. Global errors precede RPC and have empty stdout. Follow the batch
+  contract in docs/CONFIGURATION.md; later roadmap features remain separate.
 - For each functional change, add meaningful regression/protocol/file tests and
   document user-visible behavior. Run `npm test` and `npm run demo` as appropriate.
   Tests use local fake RPC and temporary directories, without keys or external

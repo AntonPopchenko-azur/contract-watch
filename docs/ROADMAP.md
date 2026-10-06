@@ -17,7 +17,8 @@ Item 16 adds offline v2 implementation comparisons on 2026-10-04.
 Item 17 adds explicit offline snapshot migration to v3 on 2026-10-05.
 Item 18 adds opt-in genesis identity and strict v4 snapshots on 2026-10-05.
 Item 19 adds explicit single-target local configuration on 2026-10-06.
-Items 20–45 have not started.
+Item 20 adds explicit sequential multi-target capture on 2026-10-06.
+Items 21–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -135,10 +136,20 @@ There is no worker-owned scheduler or automatic endless backlog.
   IDs, redaction, unchanged config and capture failures. Document the contract
   and provide a secret-free example. Completed 2026-10-06.
 
+- [x] **20 — Multi-target one-shot capture.** Add `snapshot-many` for 1–32
+  unique explicit config selections in order, with all input validation before
+  env/output and an exclusive new directory. Capture and save independently and
+  sequentially through the existing engine; preserve v1/v2/v4 files and all
+  canonical/chain/genesis checks. JSON batch report v1 records safe ordinal
+  outcomes; env/RPC/write failures continue and retain successful files, with
+  exit 0 only for all saved, otherwise 1. Tests cover limits, modes, exact request
+  budgets, advancing heads, partial/all failures, env ordering, directory races,
+  write cleanup, redaction and offline reuse. Document non-atomic set/crash limits;
+  shared blocks, concurrency, retries and history remain separate. Completed
+  2026-10-06.
+
 ## Planned increments
 
-- [ ] **20 — Multi-target one-shot capture.** Add bounded target counts and
-  explicit per-target outcomes; test partial failures and deterministic output.
 - [ ] **21 — Shared block across targets.** Resolve one block per chain for a
   multi-target run and verify all reads and saved metadata use that hash.
 - [ ] **22 — Bounded concurrency.** Add a small configurable request limit with

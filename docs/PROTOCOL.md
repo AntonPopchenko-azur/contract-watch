@@ -19,6 +19,30 @@ reports contain no configuration metadata or endpoint. Direct CLI behavior is
 preserved. Config failures use fixed CONFIG_READ/CONFIG/CONFIG_TARGET/CONFIG_ENV
 messages, exit 1, empty stdout and no new output file.
 
+## Sequential batch capture
+
+`snapshot-many --config FILE --target NAME ... --out-dir NEW` uses the unchanged
+strict config and capture engine for 1–32 explicit unique selections. The
+[batch contract](CONFIGURATION.md#sequential-one-shot-batch-capture) specifies
+validation phases, directory publication, report v1 and failure semantics.
+All selected capture inputs are checked before env access or directory creation;
+exclusive new-directory creation precedes env/RPC. Env, capture and persistence
+failures then become individual ordinal outcomes and do not undo successful files.
+
+Execution is sequential. Every target independently selects its own block and
+performs the full sequence below, including all canonical/chain/genesis rechecks.
+Even a shared endpoint does not imply a shared block or instant. No concurrency,
+RPC batching, retries or shared-state optimization is performed. The request
+budget is the sum of per-target budgets (maximum 13*N requests and
+N*(12*T+min(T,5000)) ms of request deadlines); local file work is outside it.
+
+Each saved file remains strict v1/v2/v4. Batch report v1 is separate JSON stdout,
+not an accepted snapshot wrapper; it does not add fields to any snapshot. It
+contains ordered safe outcomes and no config names or endpoints. Live beacon
+results remain transient. Exit is 0 only for all saved, otherwise 1; global
+failures have empty stdout. Partial files/directories remain, and another run
+requires a new directory. Existing single capture/offline protocols are unchanged.
+
 ## Address checksum
 
 `snapshot --strict-checksum` opts into exact

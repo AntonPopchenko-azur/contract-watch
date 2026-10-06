@@ -4,13 +4,15 @@ import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
 import { timeout } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
 import { migrateFile } from '../src/migration.js';
-import { configuredCapture } from '../src/config.js';
+import { configuredCapture, MAX_CONFIG_TARGETS } from '../src/config.js';
+import { captureMany } from '../src/batch.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
 Usage:
   contract-watch snapshot --address ADDRESS --chain-id ID --out FILE [options]
   contract-watch snapshot --config FILE --target NAME --out FILE [options]
+  contract-watch snapshot-many --config FILE --target NAME [--target NAME ...] --out-dir NEW [options]
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
@@ -38,6 +40,15 @@ Diff options:
   --json             Version 1, 2, 3 or 4 JSON report on stdout, matching the input pair
   --exit-code        Exit 2 for state changes, 0 without changes, 1 for errors
 
+Batch options:
+  --target NAME      Repeat for 1-32 unique targets in explicit execution order
+  --out-dir NEW      New directory in an existing parent; no overwrite
+Batch accepts common capture flags; no --address/--chain-id/--rpc/--out overrides.
+Sequential independent captures; no shared block, retries or rollback.
+Always emits a version 1 JSON batch report, with ordinal filenames and safe outcomes.
+Exit 0 only when all files are saved, 1 for any failure; global errors have empty stdout.
+Per-target env/RPC/write failures continue; earlier saved files remain. No --json/--exit-code.
+
 All state reads use one block hash and require EIP-1898 support.
 Choose at most one of --block, --block-hash or --depth. Depth is not finality.
 Output files are never overwritten. Parent directory must already exist.
@@ -56,31 +67,47 @@ Capture writes v1/v2 unless --genesis is explicit. Genesis is not proof of netwo
 Beacon results are not saved in v1 files. No safety assessment or complete proxy detection.
 `;
 
-function parseSnapshot(args) {
+function parseSnapshot(args, many = false) {
   const allowed = new Set([
-    '--address', '--chain-id', '--out', '--rpc', '--block', '--block-hash', '--depth', '--timeout-ms',
+    ...(many ? ['--out-dir'] : ['--address', '--chain-id', '--out', '--rpc']),
+    '--block', '--block-hash', '--depth', '--timeout-ms',
     '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis', '--config', '--target'
   ]);
   const options = {};
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
-    if (!allowed.has(key) || Object.hasOwn(options, key)) fail('USAGE');
+    if (!allowed.has(key) || (Object.hasOwn(options, key) && !(many && key === '--target'))) fail('USAGE');
     if (['--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis'].includes(key)) {
       options[key] = true;
       continue;
     }
     const value = args[++index];
     if (!value || value.startsWith('--')) fail('USAGE');
-    options[key] = value;
+    if (many && key === '--target') {
+      const names = options[key] ??= [];
+      if (names.length === MAX_CONFIG_TARGETS || names.includes(value)) fail('BATCH_TARGETS');
+      names.push(value);
+    } else options[key] = value;
   }
-  if (!options['--out']) fail('USAGE');
-  if (options['--config'] || options['--target']) {
+  if (many) {
+    if (!options['--config'] || !options['--target'] || !options['--out-dir']) fail('USAGE');
+  } else if (!options['--out']) fail('USAGE');
+  if (!many && (options['--config'] || options['--target'])) {
     if (!options['--config'] || !options['--target'] ||
         ['--address', '--chain-id', '--rpc'].some(key => Object.hasOwn(options, key))) fail('USAGE');
-  } else if (!options['--address'] || !options['--chain-id']) fail('USAGE');
+  } else if (!many && (!options['--address'] || !options['--chain-id'])) fail('USAGE');
   if (options['--resolve-beacon'] && options['--implementation-code']) fail('USAGE');
   if (['--block', '--block-hash', '--depth'].filter(key => Object.hasOwn(options, key)).length > 1) fail('USAGE');
   return options;
+}
+
+function captureFlags(options) {
+  return {
+    block: options['--block'], blockHash: options['--block-hash'], depth: options['--depth'],
+    timeoutMs: timeout(options['--timeout-ms']),
+    strictChecksum: options['--strict-checksum'] ?? false,
+    genesis: options['--genesis'] ?? false
+  };
 }
 
 function parseDiff(args) {
@@ -136,12 +163,7 @@ async function main(args) {
   }
   if (args[0] === 'snapshot') {
     const options = parseSnapshot(args.slice(1));
-    const selectedOptions = {
-      block: options['--block'], blockHash: options['--block-hash'], depth: options['--depth'],
-      timeoutMs: timeout(options['--timeout-ms']),
-      strictChecksum: options['--strict-checksum'] ?? false,
-      genesis: options['--genesis'] ?? false
-    };
+    const selectedOptions = captureFlags(options);
     const captureOptions = options['--config']
       ? await configuredCapture(options['--config'], options['--target'], selectedOptions)
       : { ...selectedOptions, rpcUrl: options['--rpc'] ?? process.env.CONTRACT_WATCH_RPC_URL,
@@ -153,6 +175,16 @@ async function main(args) {
     const report = snapshotReport(snapshot, { beaconResolution });
     await saveSnapshot(options['--out'], snapshot);
     process.stdout.write(`${report}\nSnapshot saved.\n`);
+    return;
+  }
+  if (args[0] === 'snapshot-many') {
+    const options = parseSnapshot(args.slice(1), true);
+    const report = await captureMany({ configPath: options['--config'], names: options['--target'],
+      outputDir: options['--out-dir'], options: captureFlags(options),
+      includeBeacon: options['--resolve-beacon'] ?? false,
+      includeImplementation: options['--implementation-code'] ?? false });
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    if (report.failed) process.exitCode = 1;
     return;
   }
   if (args[0] === 'diff') {

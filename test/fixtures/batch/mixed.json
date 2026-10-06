@@ -1,0 +1,31 @@
+{
+  "kind": "contract-watch-batch",
+  "schemaVersion": 1,
+  "selected": 2,
+  "saved": 1,
+  "failed": 1,
+  "outcomes": [
+    {
+      "ordinal": 1,
+      "address": "0x1111111111111111111111111111111111111111",
+      "chainId": "1",
+      "status": "saved",
+      "file": "target-01.json",
+      "snapshotVersion": 1,
+      "block": {
+        "number": "0x64",
+        "hash": "0xabababababababababababababababababababababababababababababababab"
+      }
+    },
+    {
+      "ordinal": 2,
+      "address": "0x1111111111111111111111111111111111111111",
+      "chainId": "1",
+      "status": "failed",
+      "error": {
+        "code": "CONFIG_ENV",
+        "message": "Selected RPC environment reference is missing, empty or not a valid HTTP(S) endpoint."
+      }
+    }
+  ]
+}

@@ -2,8 +2,9 @@
 
 `snapshot --config FILE --target NAME --out NEW.json [capture options]` selects
 exactly one named target from an explicit local file. Multiple definitions are
-allowed; multiple captures, implicit first-target selection, discovery, includes,
-`.env` loading and interpolation are not. No public provider is selected.
+allowed; this command captures only one. For several explicit targets, use the
+separate batch command below. Implicit first-target selection, discovery,
+includes, `.env` loading and interpolation are not supported. No public provider is selected.
 The [example](../examples/targets.json) contains invented targets and environment
 reference names only; it contains no endpoint, key or observed chain state.
 
@@ -44,7 +45,7 @@ normalization for RPC and saved snapshots. Unselected addresses require syntax,
 not the checksum requested for another target. The file is never rewritten or
 normalized in place. No schema or target name is copied into the snapshot.
 
-## CLI conflicts and validation order
+## Single-capture CLI conflicts and validation order
 
 Both `--config FILE` and `--target NAME` are required together; `--out` remains
 mandatory. Each takes one nonempty value, at most once. Equals-style options,
@@ -100,7 +101,7 @@ metadata-preserving edits are not fully preventable. Reading follows the opened
 file descriptor; replacement of the path can yield the original opened file or
 a detected change error, not a promise to read the newest path contents.
 
-All errors exit **1** with empty stdout and a fixed safe stderr message. No
+Single-capture errors exit **1** with empty stdout and a fixed safe stderr message. No
 path, name, environment key/value, arbitrary JSON key, provider message or stack
 is included. No new snapshot is created on validation, env, RPC or recheck
 failure. The existing writer still refuses every existing output, including the
@@ -143,3 +144,132 @@ casing, anomalous slots, provider failures, noncanonical blocks, reorgs and fina
 chain changes. Child spies check selected-only environment access, offline paths
 and error redaction. All targets, credentials and chain responses are synthetic;
 no external RPC or secret is needed.
+
+## Sequential one-shot batch capture
+
+`snapshot-many --config FILE --target NAME [--target NAME ...] --out-dir NEW`
+is a separate command. Reuse the unchanged config schema above. Explicitly
+select **1–32 unique names**, in execution order; no implicit all/first target,
+selection glob, config discovery or address/chain/RPC override is accepted.
+Different names may identify the same address and chain; each requested name
+still gets an independent capture. Repeating a name is an error, not a retry.
+
+Exactly one `--config` and `--out-dir` are required. Only `--target` is repeatable.
+`--out`, `--address`, `--chain-id`, `--rpc`, `--all`, `--json`, `--exit-code`,
+equals-style flags, extra arguments, missing/empty values and repeated ordinary
+flags are `USAGE` errors. More than 32 selections or duplicate names give
+`BATCH_TARGETS`; unknown/invalid names give `CONFIG_TARGET`. Missing selection
+is CLI `USAGE` (the programmatic API uses `BATCH_TARGETS` for an empty list).
+
+All common capture flags work with the previous meanings: block/tag or block
+hash or depth, timeout, strict-checksum, genesis, implementation-code or live
+resolve-beacon. Existing conflicts remain. The batch validates the entire config
+once, including unused entries, and **all selected** original addresses/checksums,
+chain IDs and capture inputs before reading any environment value or creating
+the output directory. An invalid second selection prevents the first capture.
+
+After validation, create the new output directory exclusively and nonrecursively
+inside an existing parent. Only then resolve each selected `rpcEnv` at that
+target's turn, once per target; shared references are read again for each selected
+entry. Unused references are never read. A missing, empty, non-string, invalid
+or throwing selected value produces that ordinal's `CONFIG_ENV` outcome with
+zero RPC for it; subsequent targets continue. No fallback applies.
+
+Each target runs **sequentially** through the existing capture engine and writer,
+finishing its publication or error before the next target starts. It resolves
+its own block selector and executes every hash-pinned read and final canonical,
+chain and optional genesis check. Even targets sharing a chain ID, genesis or
+endpoint can select different latest/depth blocks as the head advances. A numeric
+or hash selector is checked independently on every selected network. There is
+no shared block, simultaneous observation, connection/batch-call pooling,
+concurrency, retry, history or watch loop.
+
+All old per-target limits and deadlines apply. Total requests are at most the
+sum of individual budgets: at most `13*N` requests for N targets, and sum of
+request deadlines at most `N*(12*T + min(T,5000 ms))` with all optional reads.
+Ordinary default capture uses `8*N` requests. Failures can stop a target earlier;
+no failed request is retried. Local config/file work is outside the RPC budget;
+there is no overall batch wall-clock timeout beyond the sum of request deadlines.
+Only one snapshot/code pair is processed at a time. At most 32 ordinary bounded
+snapshot files are published (up to 24 MiB at the v2/v4 file cap), plus the current
+writer's temporary file; the in-memory outcome list is bounded at 32 entries.
+
+### Directory, filenames and partial results
+
+The new directory uses mode `0700` on POSIX, subject to the process umask. Existing
+files, directories, leaf symlinks (including dangling ones), aliases and concurrent
+creation losers give `BATCH_EXISTS`; missing/unwritable/non-directory parents
+or other creation failures give `BATCH_DIRECTORY`. These global failures occur
+before env access/RPC and produce exit 1 with empty stdout and fixed safe stderr.
+Parent directories are not created recursively or chmodded. Use a local parent
+you control; symlinks in parent components follow normal filesystem resolution.
+
+Target ordinal 1 maps to `target-01.json`, through `target-32.json`, based solely
+on the requested order, never on a config name/path/URL. Failed ordinals leave
+gaps; later files are not renumbered. Each successful snapshot remains strict
+v1/v2/v4 and is saved by the unchanged validated private (`0600`) atomic
+no-overwrite writer only after that target's checks succeed. No set manifest,
+config copy or new snapshot wrapper is written. Inspect/diff/migrate read the
+individual files exactly as before. Live beacon results stay out of the files.
+
+A target's env, RPC/recheck or save error is a **per-target failure**. Continue
+with later targets and retain earlier successful files. Existing file/link
+collisions introduced inside the directory are never overwritten; failed normal
+writes remove their temporary files. The batch directory is retained even if
+all targets fail. A retry requires an explicitly new directory; there is no
+resume, merging or cleanup of earlier results.
+
+The set is **not an atomic transaction**. Interruptions/crashes can leave a
+partial directory and no final report; a crash may leave a writer temporary
+file. The CLI has no batch cancellation/rollback protocol. Directory durability
+across power loss and protection from hostile concurrent replacement of parent
+or output directory paths are not guaranteed. Normal per-file atomicity and
+no-overwrite guarantees do not make the whole set atomic.
+
+### Batch report v1 and exit policy
+
+After all target attempts, stdout receives one two-space-indented JSON object
+and a newline. Stderr is empty for per-target outcomes, including all-failure.
+This is a **report**, not a snapshot format. Consumers must check `kind` and
+`schemaVersion`. The exact root fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `kind` | Literal `contract-watch-batch` |
+| `schemaVersion` | JSON number `1`, independently versioned |
+| `selected`, `saved`, `failed` | Integer counts; selected = saved + failed |
+| `outcomes` | One entry per selection, in CLI order, including failures |
+
+Every outcome has `ordinal` (1-based), `address` (normalized public target),
+`chainId` (exact canonical decimal expected ID) and `status` (`saved` or `failed`).
+These identity fields come from validated configuration; a failure does not
+claim they were observed at the provider.
+
+- `saved` adds `file` (the fixed ordinal basename), `snapshotVersion` (1/2/4),
+  and `block: {number, hash}` from that snapshot. It is emitted only after the
+  writer successfully publishes the file. With `--resolve-beacon`, it also has
+  the transient `beaconResolution` object from the existing live operation:
+  resolved (`status`, `beacon`, `raw`, `implementation`) or skipped (`status`,
+  `reason`). This observation is not replayable from a v1 snapshot.
+- `failed` adds only `error: {code, message}` from the existing safe fixed error
+  catalog. It has no `file`, `block`, `snapshotVersion` or partial live result.
+  Unexpected exceptions become `INTERNAL`; provider messages/stacks are discarded.
+
+No timestamps, config names/paths, environment names/values, endpoints, headers,
+raw exceptions or raw bytecode are printed. The ordinal basename is the only
+file reference. Output ordering and shape are deterministic for given outcomes;
+real block observations can differ between runs. No success preamble or partial
+per-target report is printed while the run is underway.
+
+Exit **0 only if every selected target was saved**; exit **1 if any failed**.
+This is independent of diff's opt-in exit 2; batch never uses 2. Global argument,
+config, selection, input or directory failures have no batch report, empty stdout
+and fixed safe stderr with exit 1. Scripts must distinguish a per-target failure
+report on stdout from a global failure before parsing.
+
+[The independent mixed-outcome fixture](../test/fixtures/batch/mixed.json) pins
+the JSON contract. Fake-RPC tests cover minimum/maximum selections, independent
+chains and advancing heads, sequential request order/budgets, all success,
+partial/all failure, all capture modes, env ordering, private files, directory
+races, symlink/write failures and cleanup. Existing single capture and offline
+command suites remain the compatibility checks. No external RPC is used.

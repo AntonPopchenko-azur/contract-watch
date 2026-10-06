@@ -91,20 +91,30 @@ export async function readConfig(path) {
   } catch { fail('CONFIG'); }
 }
 
-export async function configuredCapture(path, name, options, environment = process.env) {
-  const config = await readConfig(path); // Validate all entries, not just the selected one.
+// The caller supplies a fully validated config; this phase never reads env.
+export function prepareConfiguredCapture(config, name, options) {
   if (!targetName(name)) fail('CONFIG_TARGET');
   const selected = config.targets.find(entry => entry.name === name);
   if (!selected) fail('CONFIG_TARGET');
   const capture = { ...options, address: selected.address, chainId: selected.chainId };
   captureInput(capture);
   timeout(String(capture.timeoutMs ?? 10000));
+  return { capture, rpcEnv: selected.rpcEnv };
+}
+
+export function configuredEndpoint(name, environment = process.env) {
   let endpoint;
   try {
     // Only this own property may be read. Never try another target or the default env.
-    if (!Object.hasOwn(environment, selected.rpcEnv)) fail('CONFIG_ENV');
-    endpoint = environment[selected.rpcEnv];
+    if (!Object.hasOwn(environment, name)) fail('CONFIG_ENV');
+    endpoint = environment[name];
     rpcUrl(endpoint);
   } catch { fail('CONFIG_ENV'); }
-  return { ...capture, rpcUrl: endpoint };
+  return endpoint;
+}
+
+export async function configuredCapture(path, name, options, environment = process.env) {
+  const config = await readConfig(path); // Validate all entries, not just the selected one.
+  const prepared = prepareConfiguredCapture(config, name, options);
+  return { ...prepared.capture, rpcUrl: configuredEndpoint(prepared.rpcEnv, environment) };
 }

@@ -4,6 +4,9 @@ const messages = {
   CONFIG: 'Invalid configuration; expected the strict version 1 target format.',
   CONFIG_TARGET: 'Selected target name is invalid or is not defined in the configuration.',
   CONFIG_ENV: 'Selected RPC environment reference is missing, empty or not a valid HTTP(S) endpoint.',
+  BATCH_TARGETS: 'Batch capture requires 1 to 32 unique, explicitly selected targets.',
+  BATCH_EXISTS: 'Batch output destination already exists; choose a new directory.',
+  BATCH_DIRECTORY: 'Cannot create the batch output directory; use an existing writable parent.',
   ADDRESS: 'Address must be 0x followed by exactly 40 hexadecimal digits.',
   ADDRESS_CHECKSUM: 'Address must use its exact EIP-55 checksum casing.',
   CHAIN_ID: 'Chain ID must be a positive decimal or hexadecimal integer of at most 256 bits.',
@@ -54,7 +57,12 @@ export class WatchError extends Error {
 export function fail(code) { throw new WatchError(code); }
 
 // Never display third-party exception messages, URLs, filesystem paths, or stacks.
-export function publicError(error) {
+export function errorDetails(error) {
   const safe = error instanceof WatchError ? new WatchError(error.code) : new WatchError('INTERNAL');
+  return { code: safe.code, message: safe.message };
+}
+
+export function publicError(error) {
+  const safe = errorDetails(error);
   return `Error [${safe.code}]: ${safe.message}`;
 }
