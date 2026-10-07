@@ -72,8 +72,14 @@ GitHub release page. Never replace an existing published tag.
   original address casing for checksum validation. No name/config/env reference
   or endpoint enters snapshots/reports. snapshot-many explicitly selects 1–32
   unique names in order, validates all before env/output, and exclusively creates
-  a new private directory. Capture/save sequentially with independent block and
-  final checks; no shared block, concurrency, retries or rollback. Missing env,
+  a new private directory. Default capture/save is sequential with independent
+  blocks and report v1. Explicit CLI-only --shared-block groups exact expected
+  chain IDs, resolves once from the first selected member at its turn, and emits
+  batch report v2. Preserve per-target chain/hash/number/canonical/final checks,
+  and with genesis compare every target to the group observation. Failed leader
+  resolution blocks its group; never substitute another source or anchor. Reuse
+  the leader endpoint without re-reading env. Later capture/save failures retain
+  anchors and prior files. No concurrency, retries or rollback. Missing env,
   RPC and write failures are per-target safe JSON outcomes; preserve successes,
   ordinal filenames and old snapshot formats. Batch exit 0 only for all saved,
   otherwise 1. Global errors precede RPC and have empty stdout. Follow the batch

@@ -214,7 +214,7 @@ leading zeros, exponent, fraction or hex prefix. Its maximum is `2^256-1` and it
 length is at most 78 digits. Invalid values give `DEPTH`. Repeated/missing values,
 `--depth=1`, and any combination with an explicit `--block` or `--block-hash`
 give `USAGE`, before RPC or file creation. These errors use the same safe stderr
-and exit-1 policy. The option is only accepted by `snapshot`.
+and exit-1 policy. The option is accepted by `snapshot` and `snapshot-many`.
 
 If the depth exceeds the observed head height, capture fails with
 `DEPTH_UNDERFLOW`; it does not clamp to genesis or wait for more blocks. Depth 0
@@ -351,13 +351,13 @@ All selected inputs are validated before any selected RPC variable is read.
 Unused variables are never read; each selected variable is resolved at its turn.
 Missing/invalid env, RPC/recheck and file-write errors are per-target outcomes.
 
-Targets run sequentially and independently. Each resolves its own block and
-runs all existing state reads/rechecks; even two targets on the same chain can
+By default, targets run sequentially and independently. Each resolves its own
+block and runs all existing state reads/rechecks; even two targets on the same chain can
 capture different heads. No common block/time, concurrency or retries are implied.
 Per-target request budgets are unchanged; the run's budget is their sum.
 
-The final stdout is always a versioned JSON **batch report** when target attempts
-finish: `kind: "contract-watch-batch"`, `schemaVersion: 1`, selected/saved/failed
+Without `--shared-block`, final stdout is a version 1 JSON **batch report** when
+target attempts finish: `kind: "contract-watch-batch"`, `schemaVersion: 1`, selected/saved/failed
 counts and ordered `outcomes`. Each outcome has ordinal, normalized address,
 exact expected chain ID and status. Saved outcomes include the fixed filename,
 snapshot version and block; failed outcomes contain a fixed safe code/message.
@@ -377,6 +377,51 @@ a repeat needs another explicit new directory. A crash/interruption can leave
 partial results without a final report. Each saved file remains ordinary
 snapshot v1/v2/v4, usable with the existing offline inspect/diff/migrate commands.
 The single `snapshot` command remains unchanged. See [batch guarantees and limits](docs/CONFIGURATION.md#sequential-one-shot-batch-capture).
+
+## Share one block per chain in a batch
+
+Add the valueless `--shared-block` flag only to `snapshot-many`:
+
+```sh
+node bin/contract-watch.js snapshot-many --config examples/targets.json \
+  --target demo-secondary --target demo-main --out-dir snapshots/shared-001 \
+  --shared-block --block finalized --genesis
+```
+
+Provide the selected RPC environment values and an existing parent as above.
+Targets with equal normalized expected chain IDs form one group (`1` and `0x01`
+are equal). The first explicitly selected member resolves the group's block at
+its turn; later members use that exact number/hash, even if latest advances.
+Different chains get separate anchors; selection order stays unchanged.
+
+Every target, including the leader, checks its own RPC's chain ID, anchor lookup
+by hash and canonical header by number before state reads, then keeps all final
+block/chain checks. All state reads use the anchor hash with `requireCanonical`.
+With `--genesis`, each target also checks genesis twice and must agree with the
+leader's initial observed genesis. No known/public genesis is substituted.
+
+Leader env/resolution failure marks its group unavailable. Later members get
+`SHARED_BLOCK_UNAVAILABLE` without env/RPC access; other groups continue. After
+an anchor is resolved, any target's env/capture/save failure leaves it unchanged.
+There is no re-resolution, alternate source, fallback, retry or rollback.
+Successful files remain ordinary snapshots and survive subsequent failures.
+
+This flag emits **batch report v2** with `mode: "shared-block"` and ordered
+`groups` describing resolved anchors or safe failure reasons. Default batch
+retains v1 exactly. Outcome fields, private filenames and exit 0/1 semantics
+are unchanged. A resolved group means an anchor was obtained, not that every
+capture succeeded or that the entire set was canonical at one instant.
+
+Without optional reads, tag/number/depth-0 shared capture uses `2*G + 9*N`
+requests for G groups and N targets; hash/positive-depth selection uses
+`3*G + 9*N`. Genesis adds `G + 2*N`, and implementation/live-beacon reads add
+only their existing per-target costs. See the [shared-block contract](docs/CONFIGURATION.md#shared-block-mode)
+for exact deadlines, failure prefixes, v2 fields and examples.
+
+Chain ID, genesis and matching hashes are RPC observations. They do not prove
+network uniqueness, ancestry, provider honesty, simultaneous observation or
+permanent canonicality. A later reorg/provider mismatch fails that target while
+retaining earlier files; the set remains non-atomic.
 
 ## Observe a beacon implementation
 
@@ -621,8 +666,8 @@ Limits are 1 MiB per ordinary HTTP response, 16 KiB of HTTP headers, and 128 KiB
 of decoded bytes **per** target/implementation code blob. Files are bounded at
 512 KiB for v1 and 768 KiB for v2/v3/v4, including whitespace; v2/v3/v4 can hold both maximum
 code blobs. Redirects and compressed responses are rejected.
-Before adding any opt-in reads, successful captures have these bounded
-sequential RPC budgets, where `T` is
+For single capture and default independent batch members, before opt-in reads,
+successful captures have these bounded sequential RPC budgets, where `T` is
 `--timeout-ms` (10 seconds by default):
 
 | Selection | Requests | Maximum sum of request timeouts |

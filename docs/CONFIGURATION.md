@@ -168,15 +168,15 @@ once, including unused entries, and **all selected** original addresses/checksum
 chain IDs and capture inputs before reading any environment value or creating
 the output directory. An invalid second selection prevents the first capture.
 
-After validation, create the new output directory exclusively and nonrecursively
-inside an existing parent. Only then resolve each selected `rpcEnv` at that
+In default independent mode, after validation, create the new output directory
+exclusively and nonrecursively inside an existing parent. Only then resolve each selected `rpcEnv` at that
 target's turn, once per target; shared references are read again for each selected
 entry. Unused references are never read. A missing, empty, non-string, invalid
 or throwing selected value produces that ordinal's `CONFIG_ENV` outcome with
 zero RPC for it; subsequent targets continue. No fallback applies.
 
-Each target runs **sequentially** through the existing capture engine and writer,
-finishing its publication or error before the next target starts. It resolves
+In default independent mode, each target runs **sequentially** through the
+existing capture engine and writer, finishing its publication or error before the next target starts. It resolves
 its own block selector and executes every hash-pinned read and final canonical,
 chain and optional genesis check. Even targets sharing a chain ID, genesis or
 endpoint can select different latest/depth blocks as the head advances. A numeric
@@ -184,8 +184,8 @@ or hash selector is checked independently on every selected network. There is
 no shared block, simultaneous observation, connection/batch-call pooling,
 concurrency, retry, history or watch loop.
 
-All old per-target limits and deadlines apply. Total requests are at most the
-sum of individual budgets: at most `13*N` requests for N targets, and sum of
+For this default mode, all old per-target limits and deadlines apply. Total
+requests are at most the sum of individual budgets: at most `13*N` requests for N targets, and sum of
 request deadlines at most `N*(12*T + min(T,5000 ms))` with all optional reads.
 Ordinary default capture uses `8*N` requests. Failures can stop a target earlier;
 no failed request is retried. Local config/file work is outside the RPC budget;
@@ -228,8 +228,8 @@ no-overwrite guarantees do not make the whole set atomic.
 
 ### Batch report v1 and exit policy
 
-After all target attempts, stdout receives one two-space-indented JSON object
-and a newline. Stderr is empty for per-target outcomes, including all-failure.
+Without `--shared-block`, after all target attempts, stdout receives one
+two-space-indented JSON object and a newline. Stderr is empty for per-target outcomes, including all-failure.
 This is a **report**, not a snapshot format. Consumers must check `kind` and
 `schemaVersion`. The exact root fields are:
 
@@ -273,3 +273,125 @@ chains and advancing heads, sequential request order/budgets, all success,
 partial/all failure, all capture modes, env ordering, private files, directory
 races, symlink/write failures and cleanup. Existing single capture and offline
 command suites remain the compatibility checks. No external RPC is used.
+
+## Shared-block mode
+
+`--shared-block` is an explicit, valueless, once-only option on `snapshot-many`.
+It is not a config field or a new snapshot format. Duplicates, values,
+`--shared-block=true`, and use on single snapshot or offline commands are
+`USAGE` errors before env/output/RPC. Omitting it preserves independent batch
+selection, traces and JSON v1 exactly. All existing flag conflicts and bounds
+still apply. The set remains sequential in original CLI order.
+
+### Grouping, resolution and failure phases
+
+After validating the complete config and every selected capture input, group
+selected targets by **normalized expected chain ID** using exact `BigInt`
+arithmetic and canonical decimal strings, never `Number`. Decimal/hex aliases
+are equal. The first selected member of each group is its fixed leader; groups
+are reported in first-selection order, even when members are interleaved.
+Address, config name, endpoint and genesis do not change group membership.
+There are at most 32 groups, each containing at least one selected target.
+
+Create the exclusive private output directory before any env/RPC access. At a
+leader's turn, read its selected endpoint once. Resolve its anchor by checking
+observed chain ID, reading initial genesis if requested, and resolving the
+original tag/number/hash/depth through the existing selector logic. Hash mode
+includes its existing initial canonical lookup; positive depth computes the
+height once. Selecting block 0 with genesis requires agreement. No target state
+is read during resolution. Only the normalized chain ID, number/hash and optional
+observed genesis survive as the anchor; endpoints/clients are not cached.
+
+The anchor is fixed immediately after that resolution succeeds, **before the
+leader's capture**. The leader reuses the endpoint already read, while a fresh
+capture performs the full shared sequence described in [PROTOCOL.md](PROTOCOL.md#shared-block-protocol).
+Every later member reads only its own endpoint at its turn and uses the same
+anchor. It never resolves latest/safe/finalized/depth again. Repeated by-hash and
+by-number lookups verify the fixed anchor; they cannot select a replacement.
+Shared environment references are still read once per attempted target.
+
+If the leader's env or resolution fails, its outcome and group retain the
+original fixed safe error. The group has status `unavailable` and no partial
+block/genesis fields. Later members of that group get `SHARED_BLOCK_UNAVAILABLE`
+with **zero env reads and zero RPC**. They do not become substitute leaders.
+Other groups continue in original order. If all groups are unavailable, the
+new empty directory remains and the final report has exit 1.
+
+After successful resolution, a member's env, RPC, anchor verification, genesis,
+state, final check or save failure is local to that member. The anchor stays
+`resolved`, even if the leader fails or no member saves a file. The next member
+uses the original anchor; it may independently pass or fail its own checks.
+Earlier successful files remain. No retries, anchor replacement, fallback,
+concurrency, cancellation protocol, resume or set rollback are added.
+
+### Batch report v2
+
+Only this opt-in changes the closed JSON report contract. Root fields, in output
+order, are `kind`, `schemaVersion`, `mode`, `groups`, `selected`, `saved`, `failed`,
+`outcomes`. Kind remains `contract-watch-batch`; version is **2** and mode is
+literal **`shared-block`**. Counts and outcome fields are exactly as in v1.
+Outcomes refer to their group by the existing normalized `chainId`; ordinal
+filenames still reflect CLI order, with gaps for failures. Successful file/block
+metadata is printed only after publication. Live beacon results remain confined
+to successful outcomes; files remain strict v1/v2/v4 with no new fields.
+
+`groups` has one entry per expected-chain group, in first-selection order:
+
+| Fields | Contract |
+| --- | --- |
+| `chainId`, `leaderOrdinal`, `status` | Canonical decimal expected ID, first member's 1-based ordinal, `resolved` or `unavailable` |
+| Resolved: `block` | Exact `{number, hash}` selected by the leader |
+| Resolved with `--genesis`: `genesis` | `{status: "observed", hash}` from initial leader resolution |
+| Unavailable: `error` | Only `{code, message}` from the fixed safe error catalog |
+
+An unavailable group omits block/genesis; a resolved group omits error. No pending
+state is emitted. A resolved anchor does not claim a saved leader, successful
+members, finality or whole-set canonicality. No endpoints, config names/paths,
+env references/values, raw exceptions, raw bytecode or timestamps enter the
+report. No progress/partial report is emitted. The independent
+[v2 mixed-outcome fixture](../test/fixtures/batch/shared-mixed.json) pins the format.
+
+Exit policy is unchanged: 0 only when all selected files are saved, otherwise
+1, never 2. Global validation/directory failures have empty stdout and safe
+stderr; completed per-target attempts have the single JSON report and empty
+stderr. Interruption can leave files without a final report. Private output,
+no-overwrite publication, cleanup and trusted-parent limits are unchanged.
+
+### Request and deadline budgets
+
+Let N be selected targets, G distinct normalized expected-chain groups, g = 1
+with genesis (otherwise 0), and s = 1 for hash or positive-depth selection
+(otherwise 0). All targets use the same CLI selector/features/timeout T. Let C
+be the number of eligible implementation-code reads and B eligible beacon calls:
+each is at most N. Direct implementation adds C=1 per eligible target; beacon
+implementation adds C=1 and B=1; live resolution adds B=1 only; skips add neither.
+
+For successful resolution/capture, exact counts are:
+
+- Per group resolution: `2 + g + s` ordinary requests.
+- Per target capture (including leader): `9 + 2*g` ordinary requests, plus its
+  eligible code read and/or beacon call.
+- Total: `G*(2+g+s) + N*(9+2*g) + C + B` requests.
+- Sum of request deadlines: `[G*(2+g+s) + N*(9+2*g) + C]*T + B*min(T,5000 ms)`.
+
+The maximum is `4*G + 13*N` requests and `(4*G + 12*N)*T + N*min(T,5000 ms)`
+with genesis, hash/positive depth and beacon implementation. No optional reads:
+`2*G + 9*N` for tag/number/depth 0, `3*G + 9*N` for hash/positive depth. One
+ordinary shared target therefore makes 11 requests, versus 8 in default mode.
+Genesis adds `G + 2*N`, including when the chosen anchor is block 0.
+
+On failure, count only each attempted phase's prefix through the failing request,
+never a retry: bad env uses 0, initial chain failure 1, depth underflow `2+g`,
+initial genesis mismatch against a resolved group 2. Unavailable-group followers
+use 0. Later env failures use 0; save failures follow a full valid capture but
+add no RPC. These counts never exceed the corresponding successful-phase bound;
+C/B count only eligible requests reached. Unattempted phases add no deadlines.
+All ordinary limits (1 MiB response, 16 KiB headers, T), beacon limits (4 KiB,
+100000 gas, min(T,5000)), code/file bounds and disk caps remain. There is no extra
+batch wall-clock timeout; local file/config work lies outside the RPC budget.
+
+Matching chain IDs are not a network identity proof. Even matching genesis and
+anchor hashes remain provider observations, not proof of ancestry, uniqueness,
+honesty, simultaneous observations or absence of future reorgs. A reorg or
+provider disagreement between members can leave an earlier valid file beside
+a later failure; no final all-provider/set-wide recheck or atomicity is claimed.

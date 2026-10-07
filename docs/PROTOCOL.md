@@ -29,8 +29,8 @@ All selected capture inputs are checked before env access or directory creation;
 exclusive new-directory creation precedes env/RPC. Env, capture and persistence
 failures then become individual ordinal outcomes and do not undo successful files.
 
-Execution is sequential. Every target independently selects its own block and
-performs the full sequence below, including all canonical/chain/genesis rechecks.
+Execution is sequential. By default every target independently selects its own
+block and performs the full sequence below, including all canonical/chain/genesis rechecks.
 Even a shared endpoint does not imply a shared block or instant. No concurrency,
 RPC batching, retries or shared-state optimization is performed. The request
 budget is the sum of per-target budgets (maximum 13*N requests and
@@ -41,7 +41,54 @@ not an accepted snapshot wrapper; it does not add fields to any snapshot. It
 contains ordered safe outcomes and no config names or endpoints. Live beacon
 results remain transient. Exit is 0 only for all saved, otherwise 1; global
 failures have empty stdout. Partial files/directories remain, and another run
-requires a new directory. Existing single capture/offline protocols are unchanged.
+requires a new directory. Explicit `--shared-block` uses report v2 and the
+[shared protocol](#shared-block-protocol) below. Existing single capture/offline protocols are unchanged.
+
+## Shared-block protocol
+
+`snapshot-many --shared-block` explicitly fixes one anchor per normalized
+expected-chain group. Selection, failure phases, report v2 and exact budgets
+are defined in the [shared-block contract](CONFIGURATION.md#shared-block-mode).
+Grouping follows expected chain IDs, not a claim of network equivalence.
+
+At the first selected member's turn, resolution executes initial `eth_chainId`,
+optional initial block-0 observation, then the unchanged selector logic below:
+one tag/number lookup, one hash lookup plus canonical number lookup, or initial
+latest plus an exact computed-height lookup for positive depth. All block
+lookups use `false`. The validated number/hash (and optional observed genesis)
+is fixed before reading target state. Failure prevents that group's followers
+from making any env/RPC attempt; other groups continue.
+
+Each member, including the leader, then executes a fresh capture:
+
+1. Check observed chain ID. With genesis, read block 0 and compare it to the
+   group's observed genesis; disagreement gives `SHARED_GENESIS_MISMATCH`.
+2. `eth_getBlockByHash` for the anchor hash must return the exact anchor number
+   **and** hash. Null gives `BLOCK_UNAVAILABLE`; malformed or mismatched fields
+   give `RPC_DATA`. `eth_getBlockByNumber` for that exact number must return the
+   same number and hash; a different valid hash gives `BLOCK_NOT_CANONICAL`.
+3. Read target code, all three slots and eligible implementation code/beacon
+   observations using exactly `{blockHash: anchor.hash, requireCanonical:true}`.
+   Never substitute a numeric or latest state selector, even after rejection.
+4. Keep the ordinary final canonical number/hash check, optional genesis recheck
+   against this member's initial observation, and final chain check. With genesis,
+   equality to the group anchor is therefore required at both observations.
+5. Publish the same strict v1/v2/v4 snapshot, only after all these checks pass.
+
+The leader endpoint is read once for resolution plus capture, with no second env
+getter and no retained credential/client cache. Resolution and each capture use
+separate RPC request-ID sequences. All captures remain sequential in CLI order.
+A target's capture/save failure never invalidates or replaces a resolved anchor.
+A group report marked resolved means only that initial resolution succeeded.
+There is no final all-member recheck, whole-set atomicity or common instant.
+
+The checks were reviewed on 2026-10-07 against primary
+[EIP-1898](https://eips.ethereum.org/EIPS/eip-1898) and
+[Ethereum block lookup documentation](https://ethereum.org/developers/docs/apis/json-rpc/#eth_getblockbyhash).
+EIP-1898 delegates availability/canonicality checks to the responding node;
+provider rejection remains a safe `RPC_REMOTE`, without heuristic fallback.
+Matching chain ID/genesis/hash cannot authenticate that node, prove ancestry,
+identify a unique network or guarantee that a later reorg will not occur.
 
 ## Address checksum
 
@@ -58,8 +105,8 @@ Syntax errors give `ADDRESS`; a well-formed address with wrong casing gives
 `ADDRESS_CHECKSUM`. Both fail before RPC construction or file creation. The CLI
 returns status 1 with empty stdout and fixed safe stderr, without the input or a
 suggested address. Without the flag, the existing syntax-only validation accepts
-any casing. The flag is valueless, allowed once only on `snapshot`; duplicates,
-values and other commands give `USAGE`.
+any casing. The flag is valueless, allowed once only on `snapshot` or
+`snapshot-many`; duplicates, values and other commands give `USAGE`.
 
 Checksum validation applies only to the input target. After validation it is
 normalized to lowercase for RPC and snapshot v1. Stored addresses, raw slots,

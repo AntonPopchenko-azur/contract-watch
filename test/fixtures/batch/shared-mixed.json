@@ -1,0 +1,74 @@
+{
+  "kind": "contract-watch-batch",
+  "schemaVersion": 2,
+  "mode": "shared-block",
+  "groups": [
+    {
+      "chainId": "1",
+      "leaderOrdinal": 1,
+      "status": "unavailable",
+      "error": {
+        "code": "CONFIG_ENV",
+        "message": "Selected RPC environment reference is missing, empty or not a valid HTTP(S) endpoint."
+      }
+    },
+    {
+      "chainId": "2",
+      "leaderOrdinal": 2,
+      "status": "resolved",
+      "block": {
+        "number": "0x64",
+        "hash": "0xabababababababababababababababababababababababababababababababab"
+      }
+    }
+  ],
+  "selected": 4,
+  "saved": 2,
+  "failed": 2,
+  "outcomes": [
+    {
+      "ordinal": 1,
+      "address": "0x1111111111111111111111111111111111111111",
+      "chainId": "1",
+      "status": "failed",
+      "error": {
+        "code": "CONFIG_ENV",
+        "message": "Selected RPC environment reference is missing, empty or not a valid HTTP(S) endpoint."
+      }
+    },
+    {
+      "ordinal": 2,
+      "address": "0x1111111111111111111111111111111111111111",
+      "chainId": "2",
+      "status": "saved",
+      "file": "target-02.json",
+      "snapshotVersion": 1,
+      "block": {
+        "number": "0x64",
+        "hash": "0xabababababababababababababababababababababababababababababababab"
+      }
+    },
+    {
+      "ordinal": 3,
+      "address": "0x1111111111111111111111111111111111111111",
+      "chainId": "1",
+      "status": "failed",
+      "error": {
+        "code": "SHARED_BLOCK_UNAVAILABLE",
+        "message": "The first selected member could not resolve this chain group's shared block."
+      }
+    },
+    {
+      "ordinal": 4,
+      "address": "0x1111111111111111111111111111111111111111",
+      "chainId": "2",
+      "status": "saved",
+      "file": "target-04.json",
+      "snapshotVersion": 1,
+      "block": {
+        "number": "0x64",
+        "hash": "0xabababababababababababababababababababababababababababababababab"
+      }
+    }
+  ]
+}

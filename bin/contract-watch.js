@@ -43,9 +43,13 @@ Diff options:
 Batch options:
   --target NAME      Repeat for 1-32 unique targets in explicit execution order
   --out-dir NEW      New directory in an existing parent; no overwrite
+  --shared-block     Opt in to one fixed block per expected-chain group; JSON report v2
 Batch accepts common capture flags; no --address/--chain-id/--rpc/--out overrides.
-Sequential independent captures; no shared block, retries or rollback.
-Always emits a version 1 JSON batch report, with ordinal filenames and safe outcomes.
+Sequential captures; default independent blocks and JSON report v1. No retries or rollback.
+Shared mode resolves from each group's first selection, then every RPC checks that anchor.
+An unavailable anchor blocks its group without fallback; other groups continue.
+Genesis checks each target against the group's observation. No simultaneous-set guarantee.
+Reports use ordinal filenames and safe outcomes; saved snapshot formats are unchanged.
 Exit 0 only when all files are saved, 1 for any failure; global errors have empty stdout.
 Per-target env/RPC/write failures continue; earlier saved files remain. No --json/--exit-code.
 
@@ -69,7 +73,7 @@ Beacon results are not saved in v1 files. No safety assessment or complete proxy
 
 function parseSnapshot(args, many = false) {
   const allowed = new Set([
-    ...(many ? ['--out-dir'] : ['--address', '--chain-id', '--out', '--rpc']),
+    ...(many ? ['--out-dir', '--shared-block'] : ['--address', '--chain-id', '--out', '--rpc']),
     '--block', '--block-hash', '--depth', '--timeout-ms',
     '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis', '--config', '--target'
   ]);
@@ -77,7 +81,7 @@ function parseSnapshot(args, many = false) {
   for (let index = 0; index < args.length; index++) {
     const key = args[index];
     if (!allowed.has(key) || (Object.hasOwn(options, key) && !(many && key === '--target'))) fail('USAGE');
-    if (['--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis'].includes(key)) {
+    if (['--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis', '--shared-block'].includes(key)) {
       options[key] = true;
       continue;
     }
@@ -182,7 +186,8 @@ async function main(args) {
     const report = await captureMany({ configPath: options['--config'], names: options['--target'],
       outputDir: options['--out-dir'], options: captureFlags(options),
       includeBeacon: options['--resolve-beacon'] ?? false,
-      includeImplementation: options['--implementation-code'] ?? false });
+      includeImplementation: options['--implementation-code'] ?? false,
+      sharedBlock: options['--shared-block'] ?? false });
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     if (report.failed) process.exitCode = 1;
     return;

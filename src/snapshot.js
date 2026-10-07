@@ -47,13 +47,7 @@ export async function captureWithImplementation(options) {
   return (await captureObservation(options, false, true)).snapshot;
 }
 
-async function captureObservation(options, includeBeacon, includeImplementation = false) {
-  const { rpcUrl, timeoutMs = 10000, genesis = false } = options;
-  const { target, expected, hash, distance, tag } = captureInput(options);
-  const rpc = createRpc(rpcUrl, timeoutMs);
-  const actual = BigInt(quantity(await rpc('eth_chainId'))).toString();
-  if (actual !== expected) fail('CHAIN_MISMATCH');
-  const initialGenesis = genesis ? await genesisHash(rpc) : undefined;
+async function selectBlock(rpc, { hash, distance, tag }) {
   let pinned = blockHeader(await rpc(
     hash === undefined ? 'eth_getBlockByNumber' : 'eth_getBlockByHash', [hash ?? tag, false]
   ));
@@ -73,6 +67,46 @@ async function captureObservation(options, includeBeacon, includeImplementation 
     if (canonical.number !== pinned.number) fail('RPC_DATA');
     if (canonical.hash !== pinned.hash) fail('BLOCK_NOT_CANONICAL');
   } else if (tag.startsWith('0x') && pinned.number !== tag) fail('RPC_DATA');
+  return pinned;
+}
+
+// Called once at the first selected member of each expected-chain group. Only
+// public observations survive this phase; no endpoint or RPC client is retained.
+export async function resolveCaptureAnchor(options) {
+  const input = captureInput(options);
+  const rpc = createRpc(options.rpcUrl, options.timeoutMs);
+  if (BigInt(quantity(await rpc('eth_chainId'))).toString() !== input.expected) fail('CHAIN_MISMATCH');
+  const genesis = options.genesis ? await genesisHash(rpc) : undefined;
+  const block = await selectBlock(rpc, input);
+  if (genesis && block.number === '0x0' && block.hash !== genesis) fail('GENESIS_CHANGED');
+  return Object.freeze({ chainId: input.expected, block: Object.freeze(block),
+    ...(genesis ? { genesis } : {}) });
+}
+
+export async function captureAtAnchor(options, anchor, { includeBeacon = false, includeImplementation = false } = {}) {
+  return captureObservation(options, includeBeacon, includeImplementation, anchor);
+}
+
+async function confirmAnchor(rpc, block) {
+  const found = blockHeader(await rpc('eth_getBlockByHash', [block.hash, false]));
+  if (found.number !== block.number || found.hash !== block.hash) fail('RPC_DATA');
+  const canonical = blockHeader(await rpc('eth_getBlockByNumber', [block.number, false]));
+  if (canonical.number !== block.number) fail('RPC_DATA');
+  if (canonical.hash !== block.hash) fail('BLOCK_NOT_CANONICAL');
+  return { ...block };
+}
+
+async function captureObservation(options, includeBeacon, includeImplementation = false, anchor) {
+  const { rpcUrl, timeoutMs = 10000, genesis = false } = options;
+  const input = captureInput(options);
+  const { target, expected } = input;
+  const rpc = createRpc(rpcUrl, timeoutMs);
+  const actual = BigInt(quantity(await rpc('eth_chainId'))).toString();
+  if (actual !== expected) fail('CHAIN_MISMATCH');
+  const initialGenesis = genesis ? await genesisHash(rpc) : undefined;
+  if (anchor && anchor.chainId !== expected) fail('CHAIN_MISMATCH');
+  if (anchor && genesis && initialGenesis !== anchor.genesis) fail('SHARED_GENESIS_MISMATCH');
+  const pinned = anchor ? await confirmAnchor(rpc, anchor.block) : await selectBlock(rpc, input);
   if (genesis && pinned.number === '0x0' && pinned.hash !== initialGenesis) fail('GENESIS_CHANGED');
   const selector = { blockHash: pinned.hash, requireCanonical: true };
   const code = data(await rpc('eth_getCode', [target, selector]));

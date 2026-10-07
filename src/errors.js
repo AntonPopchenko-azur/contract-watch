@@ -7,6 +7,8 @@ const messages = {
   BATCH_TARGETS: 'Batch capture requires 1 to 32 unique, explicitly selected targets.',
   BATCH_EXISTS: 'Batch output destination already exists; choose a new directory.',
   BATCH_DIRECTORY: 'Cannot create the batch output directory; use an existing writable parent.',
+  SHARED_BLOCK_UNAVAILABLE: 'The first selected member could not resolve this chain group\'s shared block.',
+  SHARED_GENESIS_MISMATCH: 'RPC genesis identity does not match the shared block group\'s observed genesis.',
   ADDRESS: 'Address must be 0x followed by exactly 40 hexadecimal digits.',
   ADDRESS_CHECKSUM: 'Address must use its exact EIP-55 checksum casing.',
   CHAIN_ID: 'Chain ID must be a positive decimal or hexadecimal integer of at most 256 bits.',

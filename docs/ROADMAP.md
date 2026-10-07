@@ -18,7 +18,8 @@ Item 17 adds explicit offline snapshot migration to v3 on 2026-10-05.
 Item 18 adds opt-in genesis identity and strict v4 snapshots on 2026-10-05.
 Item 19 adds explicit single-target local configuration on 2026-10-06.
 Item 20 adds explicit sequential multi-target capture on 2026-10-06.
-Items 21–45 have not started.
+Item 21 adds opt-in shared blocks per expected-chain group on 2026-10-07.
+Items 22–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -148,10 +149,21 @@ There is no worker-owned scheduler or automatic endless backlog.
   shared blocks, concurrency, retries and history remain separate. Completed
   2026-10-06.
 
+- [x] **21 — Shared block across targets.** Add explicit `snapshot-many
+  --shared-block`, grouping exact decimal/hex chain-ID aliases and resolving
+  once from each group's first selected member. Every RPC independently checks
+  chain, anchor hash/height/canonicality and final checks; optional genesis must
+  agree with the group's initial observation. Resolution failures block only
+  that group without fallback; later capture/save failures preserve anchors and
+  successful files. Opt-in batch report v2 records safe resolved/unavailable
+  groups; default v1 and strict snapshots remain unchanged. Tests cover moving
+  heads, interleaved groups, all selectors/features, uint256 values, boundaries,
+  partial failures, reorgs, genesis, env ordering, exact traces and offline reuse.
+  Document additional request/deadline budgets and non-atomic provider trust
+  limits. Completed 2026-10-07.
+
 ## Planned increments
 
-- [ ] **21 — Shared block across targets.** Resolve one block per chain for a
-  multi-target run and verify all reads and saved metadata use that hash.
 - [ ] **22 — Bounded concurrency.** Add a small configurable request limit with
   ordering/cancellation tests; retain deterministic offline fixtures.
 - [ ] **23 — Transient-failure retry policy.** Add opt-in limited retries and
