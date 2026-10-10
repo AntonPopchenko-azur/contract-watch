@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { capture, captureWithBeacon, captureWithImplementation, readSnapshot, saveSnapshot } from '../src/snapshot.js';
 import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
-import { timeout } from '../src/validate.js';
+import { timeout, concurrency } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
 import { migrateFile } from '../src/migration.js';
 import { configuredCapture, MAX_CONFIG_TARGETS } from '../src/config.js';
@@ -41,11 +41,15 @@ Diff options:
   --exit-code        Exit 2 for state changes, 0 without changes, 1 for errors
 
 Batch options:
-  --target NAME      Repeat for 1-32 unique targets in explicit execution order
+  --target NAME      Repeat for 1-32 unique targets in explicit input/report order
   --out-dir NEW      New directory in an existing parent; no overwrite
   --shared-block     Opt in to one fixed block per expected-chain group; JSON report v2
+  --concurrency N    Batch-wide maximum active captures/RPCs, integer 1-8 (default 1)
 Batch accepts common capture flags; no --address/--chain-id/--rpc/--out overrides.
-Sequential captures; default independent blocks and JSON report v1. No retries or rollback.
+Default/1 is sequential; larger limits run ready targets concurrently, with ordered outcomes.
+Report v1 (independent) or v2 (shared) and snapshot formats do not change with concurrency.
+Shared followers wait without occupying workers; all started work finishes before the report.
+No retries, rollback or CLI interrupt/drain guarantee. Partial files survive failures.
 Shared mode resolves from each group's first selection, then every RPC checks that anchor.
 An unavailable anchor blocks its group without fallback; other groups continue.
 Genesis checks each target against the group's observation. No simultaneous-set guarantee.
@@ -73,7 +77,7 @@ Beacon results are not saved in v1 files. No safety assessment or complete proxy
 
 function parseSnapshot(args, many = false) {
   const allowed = new Set([
-    ...(many ? ['--out-dir', '--shared-block'] : ['--address', '--chain-id', '--out', '--rpc']),
+    ...(many ? ['--out-dir', '--shared-block', '--concurrency'] : ['--address', '--chain-id', '--out', '--rpc']),
     '--block', '--block-hash', '--depth', '--timeout-ms',
     '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis', '--config', '--target'
   ]);
@@ -184,6 +188,7 @@ async function main(args) {
   if (args[0] === 'snapshot-many') {
     const options = parseSnapshot(args.slice(1), true);
     const report = await captureMany({ configPath: options['--config'], names: options['--target'],
+      concurrency: concurrency(options['--concurrency']),
       outputDir: options['--out-dir'], options: captureFlags(options),
       includeBeacon: options['--resolve-beacon'] ?? false,
       includeImplementation: options['--implementation-code'] ?? false,

@@ -22,14 +22,17 @@ export function createRpc(endpoint, timeoutMs = 10000) {
       let settled = false;
       let request;
       let timer;
+      let outcome;
+      const publish = () => outcome?.error ? reject(outcome.error) : resolve(outcome?.result);
       const finish = (error, result) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        if (error) {
-          reject(error);
-          request?.destroy();
-        } else resolve(result);
+        outcome = { error, result };
+        // Do not release a capture/worker while its failed request still owns a
+        // transport. The close handler settles both successful and failed reads.
+        if (!request || request.closed) publish();
+        else if (error) request.destroy();
       };
       const stop = code => finish(new WatchError(code));
       timer = setTimeout(() => stop('RPC_TIMEOUT'), requestTimeout);
@@ -75,6 +78,10 @@ export function createRpc(endpoint, timeoutMs = 10000) {
           });
         });
         request.on('error', () => stop('RPC_NETWORK'));
+        request.on('close', () => {
+          if (!settled) stop('RPC_NETWORK');
+          else publish();
+        });
         request.end(payload);
       } catch { stop('RPC_NETWORK'); }
     });

@@ -79,7 +79,13 @@ GitHub release page. Never replace an existing published tag.
   and with genesis compare every target to the group observation. Failed leader
   resolution blocks its group; never substitute another source or anchor. Reuse
   the leader endpoint without re-reading env. Later capture/save failures retain
-  anchors and prior files. No concurrency, retries or rollback. Missing env,
+  anchors and prior files. CLI-only --concurrency accepts 1–8, default 1. Limit
+  whole active target jobs (including resolver/writer); sequential per-target
+  RPCs then keep the global request count within N across all endpoints. Queue
+  shared followers without workers/env until their fixed leader resolves; start
+  earliest ready targets and retain original outcome/group/filename order. Drain
+  started work before reporting. Timeout/body errors must close request resources
+  before releasing work. No retries, CLI interrupt workflow or rollback. Missing env,
   RPC and write failures are per-target safe JSON outcomes; preserve successes,
   ordinal filenames and old snapshot formats. Batch exit 0 only for all saved,
   otherwise 1. Global errors precede RPC and have empty stdout. Follow the batch

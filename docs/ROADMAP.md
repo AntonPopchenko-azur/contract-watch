@@ -19,7 +19,8 @@ Item 18 adds opt-in genesis identity and strict v4 snapshots on 2026-10-05.
 Item 19 adds explicit single-target local configuration on 2026-10-06.
 Item 20 adds explicit sequential multi-target capture on 2026-10-06.
 Item 21 adds opt-in shared blocks per expected-chain group on 2026-10-07.
-Items 22–45 have not started.
+Item 22 adds bounded concurrent batch admission on 2026-10-10.
+Items 23–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -162,10 +163,21 @@ There is no worker-owned scheduler or automatic endless backlog.
   Document additional request/deadline budgets and non-atomic provider trust
   limits. Completed 2026-10-07.
 
+- [x] **22 — Bounded concurrency.** Add CLI-only `snapshot-many --concurrency`
+  with strict 1–8 input and default 1 preserving sequential traces. Bound whole
+  target jobs so all resolver/capture/beacon RPCs share the same limit. Shared
+  followers wait outside workers until their fixed leader resolves; admit the
+  earliest ready target and preserve input outcome/group/filename order. Close
+  failed transport resources before releasing capacity, and drain started work
+  before reporting. Tests cover measured active requests, 1/32 targets, reversed
+  completion, interleaved/failed groups, selectors/features, timeouts/aborts,
+  queue stop/drain, partial writes and unchanged v1/v2 fixtures. Preserve strict
+  snapshots, request/deadline budgets and offline behavior; document memory and
+  cancellation/partial-output limits. No CLI interrupt workflow or retries.
+  Completed 2026-10-10.
+
 ## Planned increments
 
-- [ ] **22 — Bounded concurrency.** Add a small configurable request limit with
-  ordering/cancellation tests; retain deterministic offline fixtures.
 - [ ] **23 — Transient-failure retry policy.** Add opt-in limited retries and
   overall deadlines, preserving the same block and redacted errors.
 - [ ] **24 — Provider rate-limit handling.** Respect bounded retry delays for

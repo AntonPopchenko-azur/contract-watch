@@ -392,7 +392,8 @@ Provide the selected RPC environment values and an existing parent as above.
 Targets with equal normalized expected chain IDs form one group (`1` and `0x01`
 are equal). The first explicitly selected member resolves the group's block at
 its turn; later members use that exact number/hash, even if latest advances.
-Different chains get separate anchors; selection order stays unchanged.
+Different chains get separate anchors; output order stays unchanged. Execution
+is sequential unless `--concurrency` is greater than 1.
 
 Every target, including the leader, checks its own RPC's chain ID, anchor lookup
 by hash and canonical header by number before state reads, then keeps all final
@@ -422,6 +423,45 @@ Chain ID, genesis and matching hashes are RPC observations. They do not prove
 network uniqueness, ancestry, provider honesty, simultaneous observation or
 permanent canonicality. A later reorg/provider mismatch fails that target while
 retaining earlier files; the set remains non-atomic.
+
+## Limit concurrent batch work
+
+`--concurrency N` is a CLI-only `snapshot-many` option. Use one decimal digit
+from **1 to 8**; default and explicit **1** keep the existing sequential traces.
+For example, using the same explicit environment setup and new directory:
+
+```sh
+node bin/contract-watch.js snapshot-many --config examples/targets.json \
+  --target demo-secondary --target demo-main --out-dir snapshots/concurrent-001 \
+  --shared-block --concurrency 2 --block finalized --genesis
+```
+
+The batch admits at most N active targets, including anchor resolution and file
+publication. Each target issues one RPC at a time, so the entire batch has at
+most N active RPCs across all endpoints, including beacon calls. Targets sharing
+an endpoint share that limit. Waiting shared followers occupy no worker and read
+no env until their leader resolves. The earliest ready selection starts when a
+worker becomes available; other groups can proceed while one anchor is pending.
+A failed anchor cancels its followers' pending attempts without env/RPC access.
+
+Targets may finish and publish in a different order. Their ordinal filenames,
+report outcomes and group order remain in input order, and stdout waits for all
+started captures and writes. No report fields or versions change: independent
+mode still emits v1, shared mode v2. Existing offline fixtures and snapshot
+formats remain valid. Capture timestamps and independent latest blocks naturally
+depend on actual scheduling; the report promises no simultaneous canonicality.
+
+Concurrency adds **no RPC requests or per-request deadline time** to the budgets
+above. Waiting for admission/anchor has no running RPC timer. The conservative
+sum of request deadlines is unchanged; it is not a promise of N-fold speedup or
+a hard wall-clock limit. Memory and temporary files scale with at most N active
+targets. Timeout and transport/body errors close the affected request before
+that capture releases its worker; other work continues without retries.
+
+Successful files survive later failures. No SIGINT/SIGTERM cancellation/drain or
+rollback workflow is added: interruption can still leave partial files and no
+final report. See the [concurrency contract](docs/CONFIGURATION.md#bounded-concurrency)
+for queue ordering, internal-error drain behavior and resource limits.
 
 ## Observe a beacon implementation
 

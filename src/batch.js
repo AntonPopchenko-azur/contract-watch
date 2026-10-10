@@ -5,9 +5,11 @@ import { capture, captureWithBeacon, captureWithImplementation, saveSnapshot,
   resolveCaptureAnchor, captureAtAnchor } from './snapshot.js';
 import { address, chainId } from './validate.js';
 import { errorDetails, fail } from './errors.js';
+import { runReady } from './scheduler.js';
 
 export async function captureMany({ configPath, names, outputDir, options = {},
-  includeBeacon = false, includeImplementation = false, sharedBlock = false }, environment = process.env) {
+  includeBeacon = false, includeImplementation = false, sharedBlock = false, concurrency = 1 }, environment = process.env) {
+  if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) fail('CONCURRENCY');
   if (!Array.isArray(names) || names.length < 1 || names.length > MAX_CONFIG_TARGETS ||
       new Set(names).size !== names.length) fail('BATCH_TARGETS');
   if (typeof sharedBlock !== 'boolean' || typeof includeBeacon !== 'boolean' || typeof includeImplementation !== 'boolean' ||
@@ -28,8 +30,13 @@ export async function captureMany({ configPath, names, outputDir, options = {},
     await mkdir(directory, { mode: 0o700 });
   } catch (error) { fail(error.code === 'EEXIST' ? 'BATCH_EXISTS' : 'BATCH_DIRECTORY'); }
 
-  const outcomes = [];
-  for (const [index, selected] of prepared.entries()) {
+  const outcomes = new Array(prepared.length);
+  const groupFor = index => groups.get(chainId(prepared[index].capture.chainId));
+  await runReady(prepared.length, concurrency, index => {
+    const group = groupFor(index);
+    return !group || group.leaderOrdinal === index + 1 || group.status !== undefined;
+  }, async (index, ready) => {
+    const selected = prepared[index];
     const identity = { ordinal: index + 1, address: address(selected.capture.address), chainId: chainId(selected.capture.chainId) };
     const group = groups.get(identity.chainId);
     try {
@@ -38,12 +45,15 @@ export async function captureMany({ configPath, names, outputDir, options = {},
       let input;
       try {
         input = { ...selected.capture, rpcUrl: configuredEndpoint(selected.rpcEnv, environment) };
-        if (group && !group.status) {
+        if (group?.leaderOrdinal === index + 1) {
           group.anchor = await resolveCaptureAnchor(input);
           group.status = 'resolved';
+          ready();
         }
       } catch (error) {
-        if (group && !group.status) { group.status = 'unavailable'; group.error = errorDetails(error); }
+        if (group && !group.status) {
+          group.status = 'unavailable'; group.error = errorDetails(error); ready();
+        }
         throw error;
       }
       // Leader capture reuses the resolved endpoint, never a second env lookup.
@@ -54,12 +64,12 @@ export async function captureMany({ configPath, names, outputDir, options = {},
         : includeBeacon ? await captureWithBeacon(input) : { snapshot: await capture(input) };
       const file = `target-${String(index + 1).padStart(2, '0')}.json`;
       await saveSnapshot(join(directory, file), snapshot);
-      outcomes.push({ ...identity, status: 'saved', file, snapshotVersion: snapshot.schemaVersion,
-        block: snapshot.block, ...(beaconResolution ? { beaconResolution } : {}) });
+      outcomes[index] = { ...identity, status: 'saved', file, snapshotVersion: snapshot.schemaVersion,
+        block: snapshot.block, ...(beaconResolution ? { beaconResolution } : {}) };
     } catch (error) {
-      outcomes.push({ ...identity, status: 'failed', error: errorDetails(error) });
+      outcomes[index] = { ...identity, status: 'failed', error: errorDetails(error) };
     }
-  }
+  });
   const saved = outcomes.filter(outcome => outcome.status === 'saved').length;
   return { kind: 'contract-watch-batch', schemaVersion: sharedBlock ? 2 : 1,
     ...(sharedBlock ? { mode: 'shared-block', groups: [...groups.values()].map(group => ({

@@ -90,3 +90,8 @@ export function timeout(value = '10000') {
       Number(value) < 100 || Number(value) > 60000) fail('TIMEOUT_OPTION');
   return Number(value);
 }
+
+export function concurrency(value = '1') {
+  if (typeof value !== 'string' || !/^[1-8]$/.test(value)) fail('CONCURRENCY');
+  return Number(value);
+}

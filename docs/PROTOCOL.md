@@ -29,10 +29,10 @@ All selected capture inputs are checked before env access or directory creation;
 exclusive new-directory creation precedes env/RPC. Env, capture and persistence
 failures then become individual ordinal outcomes and do not undo successful files.
 
-Execution is sequential. By default every target independently selects its own
+Default concurrency 1 is sequential. By default every target independently selects its own
 block and performs the full sequence below, including all canonical/chain/genesis rechecks.
-Even a shared endpoint does not imply a shared block or instant. No concurrency,
-RPC batching, retries or shared-state optimization is performed. The request
+Even a shared endpoint does not imply a shared block or instant. Concurrency
+requires explicit `--concurrency`; no RPC batching or retries are performed. The request
 budget is the sum of per-target budgets (maximum 13*N requests and
 N*(12*T+min(T,5000)) ms of request deadlines); local file work is outside it.
 
@@ -77,7 +77,9 @@ Each member, including the leader, then executes a fresh capture:
 
 The leader endpoint is read once for resolution plus capture, with no second env
 getter and no retained credential/client cache. Resolution and each capture use
-separate RPC request-ID sequences. All captures remain sequential in CLI order.
+separate RPC request-ID sequences. Each capture remains sequential; the
+[concurrency protocol](#bounded-concurrency-protocol) allows multiple ready
+captures only when explicitly requested.
 A target's capture/save failure never invalidates or replaces a resolved anchor.
 A group report marked resolved means only that initial resolution succeeded.
 There is no final all-member recheck, whole-set atomicity or common instant.
@@ -89,6 +91,38 @@ EIP-1898 delegates availability/canonicality checks to the responding node;
 provider rejection remains a safe `RPC_REMOTE`, without heuristic fallback.
 Matching chain ID/genesis/hash cannot authenticate that node, prove ancestry,
 identify a unique network or guarantee that a later reorg will not occur.
+
+## Bounded concurrency protocol
+
+`--concurrency 1–8` only changes batch admission. Default/1 preserves the
+existing sequential traces; larger values bound complete target jobs, including
+leader resolution and file publication. Each job awaits every RPC, so the same
+limit bounds active requests across all selected endpoints and beacon calls.
+No protocol reads, selector hashes, request IDs within a capture or final
+chain/block/genesis checks are omitted or parallelized within one target.
+
+The queue starts the earliest ready selection. Shared followers wait outside
+workers until their fixed leader resolves or fails; a readiness notification
+allows other groups and newly eligible followers to proceed without polling.
+Failed resolution cancels followers' pending attempts without env/RPC. Started
+targets are drained before reporting. Ordinary failures continue other work;
+unexpected scheduler exceptions stop queued dispatch and drain started jobs.
+Full CLI interrupt handling remains a later feature.
+
+RPC promises settle after the HTTP request closes. On a timeout or rejected/
+aborted/malformed response, the client destroys the failed request, clears its
+timer and waits for close before that job can issue more work or release its
+worker. This follows the documented request lifecycle and destroy behavior in
+[Node.js HTTP](https://nodejs.org/api/http.html#httprequesturl-options-callback),
+reviewed on 2026-10-10. Cleanup does not add a request, retry or fallback.
+
+Reports keep v1/v2 contracts and original outcome/group order; snapshots keep
+v1/v2/v4 strict fields and atomic no-overwrite publication. Physical publication
+and capture timestamps may differ in order. Request/deadline budgets do not
+change; memory and temporary files scale with the active-job cap. See the
+[concurrency contract](CONFIGURATION.md#bounded-concurrency) for exact bounds,
+queue semantics and cancellation/partial-output limits. No common instant,
+whole-set canonicality or atomic transaction is promised.
 
 ## Address checksum
 

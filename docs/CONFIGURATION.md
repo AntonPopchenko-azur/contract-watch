@@ -149,7 +149,7 @@ no external RPC or secret is needed.
 
 `snapshot-many --config FILE --target NAME [--target NAME ...] --out-dir NEW`
 is a separate command. Reuse the unchanged config schema above. Explicitly
-select **1–32 unique names**, in execution order; no implicit all/first target,
+select **1–32 unique names**, in input order; no implicit all/first target,
 selection glob, config discovery or address/chain/RPC override is accepted.
 Different names may identify the same address and chain; each requested name
 still gets an independent capture. Repeating a name is an error, not a retry.
@@ -175,7 +175,7 @@ entry. Unused references are never read. A missing, empty, non-string, invalid
 or throwing selected value produces that ordinal's `CONFIG_ENV` outcome with
 zero RPC for it; subsequent targets continue. No fallback applies.
 
-In default independent mode, each target runs **sequentially** through the
+With default concurrency 1, each independent target runs **sequentially** through the
 existing capture engine and writer, finishing its publication or error before the next target starts. It resolves
 its own block selector and executes every hash-pinned read and final canonical,
 chain and optional genesis check. Even targets sharing a chain ID, genesis or
@@ -190,7 +190,7 @@ request deadlines at most `N*(12*T + min(T,5000 ms))` with all optional reads.
 Ordinary default capture uses `8*N` requests. Failures can stop a target earlier;
 no failed request is retried. Local config/file work is outside the RPC budget;
 there is no overall batch wall-clock timeout beyond the sum of request deadlines.
-Only one snapshot/code pair is processed at a time. At most 32 ordinary bounded
+At default concurrency 1, only one snapshot/code pair is processed at a time. At most 32 ordinary bounded
 snapshot files are published (up to 24 MiB at the v2/v4 file cap), plus the current
 writer's temporary file; the in-memory outcome list is bounded at 32 entries.
 
@@ -281,7 +281,8 @@ It is not a config field or a new snapshot format. Duplicates, values,
 `--shared-block=true`, and use on single snapshot or offline commands are
 `USAGE` errors before env/output/RPC. Omitting it preserves independent batch
 selection, traces and JSON v1 exactly. All existing flag conflicts and bounds
-still apply. The set remains sequential in original CLI order.
+still apply. Default concurrency 1 remains sequential in original CLI order;
+[larger limits](#bounded-concurrency) run ready targets concurrently.
 
 ### Grouping, resolution and failure phases
 
@@ -322,7 +323,8 @@ state, final check or save failure is local to that member. The anchor stays
 `resolved`, even if the leader fails or no member saves a file. The next member
 uses the original anchor; it may independently pass or fail its own checks.
 Earlier successful files remain. No retries, anchor replacement, fallback,
-concurrency, cancellation protocol, resume or set rollback are added.
+CLI cancellation protocol, resume or set rollback are added. Concurrency is
+separately opt-in through `--concurrency`.
 
 ### Batch report v2
 
@@ -395,3 +397,94 @@ anchor hashes remain provider observations, not proof of ancestry, uniqueness,
 honesty, simultaneous observations or absence of future reorgs. A reorg or
 provider disagreement between members can leave an earlier valid file beside
 a later failure; no final all-provider/set-wide recheck or atomicity is claimed.
+
+## Bounded concurrency
+
+`snapshot-many --concurrency N` accepts exactly one ASCII digit **1–8**. The
+flag takes one value, at most once, and has no config/schema counterpart. Default
+and explicit 1 execute sequentially with the same request traces and v1/v2 JSON
+bytes for the same observations. Single `snapshot`, inspect/diff/migrate reject
+it. Missing/empty values, duplicates, equals syntax and wrong commands give
+`USAGE`; a supplied invalid number gives `CONCURRENCY`. Whitespace, leading
+zeros, signs, hexadecimal, decimal points/exponents, Unicode digits, 0 and 9+
+are rejected. Validation precedes config/env/RPC/output; all existing options
+and every selected target are still validated before creating the directory.
+
+### Admission and dependencies
+
+The limit covers **whole target jobs**, from selected env lookup through anchor
+resolution (leader only), sequential capture/rechecks and publication or failure.
+At most N such jobs are active; every job awaits each RPC before starting another.
+Consequently there are at most N active client RPC requests across the entire
+batch, including short beacon calls and requests from different or shared URLs.
+There is no separate per-endpoint allowance, extra resolver pool or hidden RPC
+fan-out. Idle file work may leave fewer than N network requests active.
+
+The ready queue is bounded by the existing 32-selection cap. When capacity is
+available it scans in input order and starts the earliest ready target. An
+independent target or a group's fixed first member is ready immediately. A
+shared follower waits in the queue until its own leader's resolution completes;
+it occupies **no worker or unresolved follower promise** and does not read env.
+Other groups can use free workers, even when earlier followers are waiting.
+Resolution success wakes followers immediately, without waiting for the leader's
+capture/save to finish. They use only the immutable original anchor. Resolution
+failure wakes them to their existing `SHARED_BLOCK_UNAVAILABLE` outcomes, with
+zero env/RPC, and never makes another member leader.
+
+Each actually attempted target reads its selected endpoint once, at admission.
+The leader reuses that same value for resolution plus capture; shared references
+are read separately per admitted target, not cached. Unselected definitions'
+env values are never read. A member's env/capture/save failure after resolution
+is local to that member and does not cancel the group, replace the anchor or
+undo another file. The finite queue is rescanned on resolution and completion;
+there are no polling timers or waits that can occupy every worker while their
+leader remains queued.
+
+### Reports, files and stopping
+
+No new report version/fields are needed: concurrency changes scheduling only.
+Independent output remains closed batch v1; shared output remains closed v2.
+Counts/outcomes, group order and ordinal basenames follow original selections,
+regardless of admission/completion order. Success is recorded only after the
+same private atomic no-overwrite writer finishes. Final stdout waits for every
+started capture/write and every queued outcome; no partial progress JSON is
+printed. Exit 0/1 semantics, fixed error catalog and redaction are unchanged.
+The independent v1/v2 fixtures remain byte-compatible. Real timestamps and
+observations need not match a sequential run, particularly independent latest.
+
+On request timeout or HTTP/body/connection error, destroy the failed request
+and wait for its close before settling that RPC; no subsequent request or
+replacement target starts using that job's capacity before transport cleanup.
+A body abort/error remains a safe failure, not a retry. Ordinary target errors
+continue scheduling remaining ready work. Internal scheduler/work exceptions
+stop new dispatch and drain already-started work before a safe `INTERNAL` error;
+there is no final batch report in that exceptional path, and saved files remain.
+No pending follower promises or per-queue timers need cancellation.
+
+This is **not** a CLI signal/cancellation protocol. SIGINT/SIGTERM, crashes and
+power loss can leave partial files (including temporary files), without a final
+report or a promise to drain. No rollback, resume, target restart, retries or
+rate-limit handling is added. The trusted-parent, exclusive-directory and
+per-file no-overwrite guarantees stay unchanged. A concurrent set is not atomic,
+not necessarily observed at one instant, and not guaranteed jointly canonical.
+
+### Resource and time bounds
+
+All per-target and group request counts/deadlines above are unchanged. For M
+selected targets, G groups, genesis g and selector cost s, independent total is
+`M*(8+s+2*g)+C+B`; shared total is `G*(2+g+s)+M*(9+2*g)+C+B`. Here C counts eligible
+implementation code requests and B eligible beacon calls. Their deadline sums
+replace every ordinary request by T and every beacon call by min(T,5000 ms), as
+before. Failures consume only attempted prefixes; blocked followers add zero.
+Concurrency adds no requests and does not multiply any allowance by N.
+
+A request timer starts when that request is constructed, not while its target
+waits for a worker or anchor. Each timer still covers connection, headers and
+body and is cleared at completion/failure; transport close follows cleanup.
+The unchanged sum of RPC deadlines is a conservative bound on RPC work, not
+sum/N wall time. Admission dependencies, filesystem work, event-loop scheduling
+and transport cleanup prevent an exact N-fold bound; no overall wall timeout
+is introduced. At most N requests' response bodies, target/implementation pairs and
+writer temporary files are active (N ≤ 8). Published files remain capped at 32
+and 24 MiB total; temporary files add at most N times the 768 KiB cap. Each code
+blob, response and file retains its existing individual cap.
