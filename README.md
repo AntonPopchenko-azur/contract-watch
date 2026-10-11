@@ -171,7 +171,9 @@ credentials and fragments are rejected. The CLI never prints or stores the URL.
 | `--block BLOCK` | `latest` by default; `safe`, `finalized`, decimal or hex block number also accepted |
 | `--block-hash HASH` | Exact `0x` plus 64 hex digits; canonical block only |
 | `--depth N` | Blocks behind the initial `latest` height; canonical decimal `0..2^256-1`, at most 78 digits |
-| `--timeout-ms MS` | 100–60000 ms per whole request; default 10000 |
+| `--timeout-ms MS` | 100–60000 ms per whole attempt; default 10000 |
+| `--retries N` | Canonical single digit 0–3, default 0; positive values require `--deadline-ms` |
+| `--deadline-ms MS` | Canonical decimal 100–600000 ms per active capture, including retries/delays |
 | `--strict-checksum` | Opt-in exact EIP-55 casing for the target address; no value |
 | `--resolve-beacon` | Opt-in bounded beacon `implementation()` read; result in live text report only |
 | `--implementation-code` | Opt-in snapshot v2 with separately saved implementation code and address provenance; includes eligible beacon resolution |
@@ -220,8 +222,8 @@ If the depth exceeds the observed head height, capture fails with
 `DEPTH_UNDERFLOW`; it does not clamp to genesis or wait for more blocks. Depth 0
 reuses the first head's hash. Positive depth fetches the exact computed height
 once. State reads then use that target hash with `requireCanonical: true`, and
-the final block/chain checks still apply. No retry or replacement target is
-selected after an error or reorg. Depth does not prove finality, block ancestry,
+the final block/chain checks still apply. No replacement target is selected
+after an error or reorg; opt-in retries repeat only the failed logical read. Depth does not prove finality, block ancestry,
 or honesty of the RPC. Old state can be pruned or require an archive provider.
 Depth selection preserves snapshot/diff v1 and works with the existing RPC,
 timeout and strict-checksum options.
@@ -404,7 +406,7 @@ leader's initial observed genesis. No known/public genesis is substituted.
 Leader env/resolution failure marks its group unavailable. Later members get
 `SHARED_BLOCK_UNAVAILABLE` without env/RPC access; other groups continue. After
 an anchor is resolved, any target's env/capture/save failure leaves it unchanged.
-There is no re-resolution, alternate source, fallback, retry or rollback.
+There is no re-resolution, alternate source, fallback or rollback.
 Successful files remain ordinary snapshots and survive subsequent failures.
 
 This flag emits **batch report v2** with `mode: "shared-block"` and ordered
@@ -414,7 +416,7 @@ are unchanged. A resolved group means an anchor was obtained, not that every
 capture succeeded or that the entire set was canonical at one instant.
 
 Without optional reads, tag/number/depth-0 shared capture uses `2*G + 9*N`
-requests for G groups and N targets; hash/positive-depth selection uses
+logical reads for G groups and N targets; hash/positive-depth selection uses
 `3*G + 9*N`. Genesis adds `G + 2*N`, and implementation/live-beacon reads add
 only their existing per-target costs. See the [shared-block contract](docs/CONFIGURATION.md#shared-block-mode)
 for exact deadlines, failure prefixes, v2 fields and examples.
@@ -456,12 +458,52 @@ above. Waiting for admission/anchor has no running RPC timer. The conservative
 sum of request deadlines is unchanged; it is not a promise of N-fold speedup or
 a hard wall-clock limit. Memory and temporary files scale with at most N active
 targets. Timeout and transport/body errors close the affected request before
-that capture releases its worker; other work continues without retries.
+a retry starts or that capture releases its worker. Retry delays retain the worker.
 
 Successful files survive later failures. No SIGINT/SIGTERM cancellation/drain or
 rollback workflow is added: interruption can still leave partial files and no
 final report. See the [concurrency contract](docs/CONFIGURATION.md#bounded-concurrency)
 for queue ordering, internal-error drain behavior and resource limits.
+
+## Retry transient reads within a capture deadline
+
+Both capture commands accept explicit CLI-only `--retries N` and
+`--deadline-ms MS`. For example, add `--retries 2 --deadline-ms 30000` to a
+snapshot or batch command. N is one ASCII digit **0–3**, default **0**; a positive
+value requires a deadline. MS is canonical ASCII decimal **100–600000**, without
+leading zeros, signs, spaces, fractions or exponent notation. A deadline can
+also be used alone. Duplicates, missing values, invalid values and conflicts
+fail before env/RPC/output. Neither option belongs in config or offline commands.
+Omitting both, or specifying only `--retries 0`, preserves previous behavior.
+
+Each logical read gets at most **1+N attempts**, with delays **100, 200, 400 ms**
+before successive retries. Only transport failures, attempt timeouts and HTTP
+**502/503/504** qualify. HTTP 429 (including Retry-After), other statuses,
+redirects, encoding/size/envelope errors, JSON-RPC errors, invalid/null results,
+chain/genesis/canonical mismatches and file errors are never retried. Exhaustion
+returns the original fixed safe error. Every attempt uses the same method and
+parameters with a fresh ID. Earlier successful reads are never restarted, so
+latest/depth selection, genesis and the pinned hash are not replaced.
+
+The monotonic deadline covers one active capture, including all reads, retries
+and delays. A shared leader's resolver and capture share that budget; each
+follower starts its own when admitted, excluding queue/anchor wait. Each attempt
+uses the smaller of its usual timeout and remaining time; beacon attempts also
+retain the 5000 ms, 100000 gas and 4 KiB limits. On exhaustion, the current
+transport/delay ends and no new attempt starts: `CAPTURE_DEADLINE` takes priority
+over a simultaneous request error or retry exhaustion. The engine checks time
+after results/validation and before handing a successful capture to the writer.
+Failed transports close before a retry starts. Retry delays retain their target
+worker, preserving the batch-wide concurrency cap.
+
+The counts below describe logical reads with retries disabled. With N retries,
+maximum attempts are **(1+N) × logical reads**; total backoff per logical read is
+0/100/300/700 ms for N=0/1/2/3. The deadline can stop that sequence sooner.
+See [exact request/time budgets](docs/CONFIGURATION.md#retry-and-capture-deadline-budgets).
+This is a capture budget, excluding config/output/file work, not a hard process
+or whole-batch wall-clock guarantee: event-loop and transport cleanup can run
+late. It adds no rollback or signal workflow. Successful files and resolved
+anchors survive later failures; snapshot v1/v2/v4 and batch v1/v2 remain unchanged.
 
 ## Observe a beacon implementation
 
@@ -479,7 +521,8 @@ cannot replay this observation or detect a changed implementation behind an
 unchanged beacon. Without `--genesis`, this live-only option continues to produce v1; with
 `--genesis` it produces v4, still without saving the live beacon response.
 
-The CLI makes at most one call, after reading target code and all three slots.
+The CLI makes one logical call, after reading target code and all three slots.
+Without retries this is at most one attempt; the opt-in policy below also applies.
 It requires nonempty target code, canonical address padding in every slot, an
 empty implementation slot and a nonzero beacon address. Otherwise it reports
 `Beacon resolution skipped` with the reason and saves the ordinary snapshot.
@@ -491,7 +534,8 @@ value, `implementation()` input `0x5c60da1b`, and 100000 gas. Its EIP-1898 selec
 uses the same block hash and `requireCanonical: true` as all state reads.
 Timeout is the smaller of `--timeout-ms` and 5000 ms; the entire response is
 limited to 4 KiB. Gas is never estimated or increased. A contract needing more
-gas/time fails; there is no retry or fallback.
+gas/time fails unless an eligible transient failure recovers within the opt-in
+retry budget. No selector or gas fallback is permitted.
 
 Only one ABI-encoded, nonzero address is accepted: exactly 32 bytes of hex with
 12 leading zero bytes, normalized to lowercase. Zero, empty, malformed,
@@ -669,7 +713,8 @@ block 0 again and requires the same hash, then rechecks the chain ID. This detec
 observed switching between networks sharing a chain ID. Selecting block 0 also
 requires its hash to match the initial genesis before reading state. Null headers,
 malformed/zero hashes, errors or changed identity abort with empty stdout and no
-new file. There are no retries; ordinary response limits and deadlines apply.
+new file. Invalid identity/data is never retried; transient failures can use
+the opt-in retry policy. Ordinary response limits still apply.
 
 V4 saves `genesis: {"status":"observed","hash":"0x…"}`. Without
 `--implementation-code`, its implementation field is exactly `{"status":"not-recorded"}`;
@@ -707,7 +752,7 @@ of decoded bytes **per** target/implementation code blob. Files are bounded at
 512 KiB for v1 and 768 KiB for v2/v3/v4, including whitespace; v2/v3/v4 can hold both maximum
 code blobs. Redirects and compressed responses are rejected.
 For single capture and default independent batch members, before opt-in reads,
-successful captures have these bounded sequential RPC budgets, where `T` is
+successful captures without retries have these bounded sequential RPC budgets, where `T` is
 `--timeout-ms` (10 seconds by default):
 
 | Selection | Requests | Maximum sum of request timeouts |
@@ -730,7 +775,8 @@ or invalid implementation result aborts capture with no file or partial stdout.
 `--genesis` adds exactly two ordinary requests / `2*T` in every successful
 mode, including when the selected block is 0. Base totals become 10 or 11;
 the maximum with beacon code is 13 requests / `12*T + min(T,5000 ms)`.
-There are no retries or background loop. Depth underflow stops after the chain
+These counts assume no retries; the retry multipliers above apply only when opted in.
+There is no background loop. Depth underflow stops after the chain
 check and initial head lookup (two requests, or three with genesis). Local file work is outside this
 RPC timeout budget. Block lookups request transaction hashes only,
 not full transaction objects; the same 1 MiB response limit applies to them.

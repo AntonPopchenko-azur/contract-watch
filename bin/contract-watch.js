@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { capture, captureWithBeacon, captureWithImplementation, readSnapshot, saveSnapshot } from '../src/snapshot.js';
 import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
-import { timeout, concurrency } from '../src/validate.js';
+import { timeout, concurrency, retries, deadline, retryOptions } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
 import { migrateFile } from '../src/migration.js';
 import { configuredCapture, MAX_CONFIG_TARGETS } from '../src/config.js';
 import { captureMany } from '../src/batch.js';
+import { startCapture, capturePolicy } from '../src/capture-policy.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
@@ -27,11 +28,15 @@ Snapshot options:
   --block-hash HASH   Exact 32-byte block hash
   --depth N           N blocks behind the initial latest head (0 means that head)
                       Decimal 0..2^256-1, at most 78 digits, no leading zeros
-  --timeout-ms MS     Total timeout per request, 100–60000 (default 10000)
+  --timeout-ms MS     Total timeout per attempt, 100–60000 (default 10000)
+  --retries N         0–3 retries per read (default 0); positive N requires --deadline-ms
+  --deadline-ms MS    Overall active capture budget, canonical decimal 100–600000 ms
+                      Includes retries and 100/200/400 ms delays; excludes queue/file work
+                      Shared leader resolution uses the same budget; no reset
   --strict-checksum   Require exact EIP-55 address casing before any RPC call
   --genesis          Save v4 with observed genesis identity; adds two block-0 reads
   --resolve-beacon    Read an eligible beacon's implementation(); live report only
-                      At most 1 call, 100000 gas, min(timeout, 5000 ms), 4 KiB response
+                      One logical call, 100000 gas, min(timeout, 5000 ms), 4 KiB per attempt
   --implementation-code  Save v2 with separate implementation code and address provenance
                       Resolves an eligible beacon with the same call limits
                       Cannot combine with --resolve-beacon
@@ -49,7 +54,8 @@ Batch accepts common capture flags; no --address/--chain-id/--rpc/--out override
 Default/1 is sequential; larger limits run ready targets concurrently, with ordered outcomes.
 Report v1 (independent) or v2 (shared) and snapshot formats do not change with concurrency.
 Shared followers wait without occupying workers; all started work finishes before the report.
-No retries, rollback or CLI interrupt/drain guarantee. Partial files survive failures.
+Retries cover transport/timeouts and HTTP 502/503/504 only; no 429 handling.
+No rollback or CLI interrupt/drain guarantee. Partial files survive failures.
 Shared mode resolves from each group's first selection, then every RPC checks that anchor.
 An unavailable anchor blocks its group without fallback; other groups continue.
 Genesis checks each target against the group's observation. No simultaneous-set guarantee.
@@ -78,7 +84,7 @@ Beacon results are not saved in v1 files. No safety assessment or complete proxy
 function parseSnapshot(args, many = false) {
   const allowed = new Set([
     ...(many ? ['--out-dir', '--shared-block', '--concurrency'] : ['--address', '--chain-id', '--out', '--rpc']),
-    '--block', '--block-hash', '--depth', '--timeout-ms',
+    '--block', '--block-hash', '--depth', '--timeout-ms', '--retries', '--deadline-ms',
     '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis', '--config', '--target'
   ]);
   const options = {};
@@ -111,6 +117,8 @@ function parseSnapshot(args, many = false) {
 
 function captureFlags(options) {
   return {
+    ...retryOptions({ retries: retries(options['--retries']),
+      deadlineMs: options['--deadline-ms'] === undefined ? undefined : deadline(options['--deadline-ms']) }),
     block: options['--block'], blockHash: options['--block-hash'], depth: options['--depth'],
     timeoutMs: timeout(options['--timeout-ms']),
     strictChecksum: options['--strict-checksum'] ?? false,
@@ -172,15 +180,16 @@ async function main(args) {
   if (args[0] === 'snapshot') {
     const options = parseSnapshot(args.slice(1));
     const selectedOptions = captureFlags(options);
-    const captureOptions = options['--config']
+    const captureOptions = startCapture(options['--config']
       ? await configuredCapture(options['--config'], options['--target'], selectedOptions)
       : { ...selectedOptions, rpcUrl: options['--rpc'] ?? process.env.CONTRACT_WATCH_RPC_URL,
-        address: options['--address'], chainId: options['--chain-id'] };
+        address: options['--address'], chainId: options['--chain-id'] });
     const { snapshot, beaconResolution } = options['--implementation-code']
       ? { snapshot: await captureWithImplementation(captureOptions) }
       : options['--resolve-beacon']
         ? await captureWithBeacon(captureOptions) : { snapshot: await capture(captureOptions) };
     const report = snapshotReport(snapshot, { beaconResolution });
+    capturePolicy(captureOptions).check();
     await saveSnapshot(options['--out'], snapshot);
     process.stdout.write(`${report}\nSnapshot saved.\n`);
     return;

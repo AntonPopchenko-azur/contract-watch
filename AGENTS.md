@@ -85,7 +85,19 @@ GitHub release page. Never replace an existing published tag.
   shared followers without workers/env until their fixed leader resolves; start
   earliest ready targets and retain original outcome/group/filename order. Drain
   started work before reporting. Timeout/body errors must close request resources
-  before releasing work. No retries, CLI interrupt workflow or rollback. Missing env,
+  before retrying or releasing work. CLI-only --retries accepts 0–3 (default 0);
+  positive values require --deadline-ms, canonical 100–600000 ms. Retry only
+  transport/timeouts and HTTP 502/503/504, at most 1+N attempts per logical read
+  with 100/200/400 ms delays, same parameters and fresh IDs. Never retry 429,
+  protocol/result/identity/canonical errors or file operations, restart captures,
+  or replace pins. One monotonic active-capture budget includes resolver for
+  shared leaders; followers start their own budget at admission, excluding queue
+  waits. Bound each attempt by remaining time (beacon also at most 5s), check
+  before returning/persistence and use fixed CAPTURE_DEADLINE on exhaustion.
+  Retry delays retain workers. Defaults/explicit zero without deadline preserve
+  traces/errors/budgets; snapshot/report/config schemas are unchanged. Deadline
+  excludes file work and is not a hard process/batch wall limit. No CLI interrupt
+  workflow or rollback. Missing env,
   RPC and write failures are per-target safe JSON outcomes; preserve successes,
   ordinal filenames and old snapshot formats. Batch exit 0 only for all saved,
   otherwise 1. Global errors precede RPC and have empty stdout. Follow the batch

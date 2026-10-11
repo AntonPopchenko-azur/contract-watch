@@ -61,7 +61,7 @@ those options; they are explicit CLI choices.
 
 The order is:
 
-1. Parse required CLI flags, duplicates/conflicts and request timeout.
+1. Parse required CLI flags, duplicates/conflicts, request timeout and retry/deadline options.
 2. Open/read/decode the bounded config, rejecting unstable reads and validating
    its full structure and every target.
 3. Validate the selected name and find exactly one entry.
@@ -322,7 +322,7 @@ After successful resolution, a member's env, RPC, anchor verification, genesis,
 state, final check or save failure is local to that member. The anchor stays
 `resolved`, even if the leader fails or no member saves a file. The next member
 uses the original anchor; it may independently pass or fail its own checks.
-Earlier successful files remain. No retries, anchor replacement, fallback,
+Earlier successful files remain. No anchor replacement, fallback,
 CLI cancellation protocol, resume or set rollback are added. Concurrency is
 separately opt-in through `--concurrency`.
 
@@ -368,7 +368,7 @@ be the number of eligible implementation-code reads and B eligible beacon calls:
 each is at most N. Direct implementation adds C=1 per eligible target; beacon
 implementation adds C=1 and B=1; live resolution adds B=1 only; skips add neither.
 
-For successful resolution/capture, exact counts are:
+Without retries, for successful resolution/capture, exact counts are:
 
 - Per group resolution: `2 + g + s` ordinary requests.
 - Per target capture (including leader): `9 + 2*g` ordinary requests, plus its
@@ -383,7 +383,7 @@ ordinary shared target therefore makes 11 requests, versus 8 in default mode.
 Genesis adds `G + 2*N`, including when the chosen anchor is block 0.
 
 On failure, count only each attempted phase's prefix through the failing request,
-never a retry: bad env uses 0, initial chain failure 1, depth underflow `2+g`,
+without opt-in retries: bad env uses 0, initial chain failure 1, depth underflow `2+g`,
 initial genesis mismatch against a resolved group 2. Unavailable-group followers
 use 0. Later env failures use 0; save failures follow a full valid capture but
 add no RPC. These counts never exceed the corresponding successful-phase bound;
@@ -455,7 +455,7 @@ observations need not match a sequential run, particularly independent latest.
 On request timeout or HTTP/body/connection error, destroy the failed request
 and wait for its close before settling that RPC; no subsequent request or
 replacement target starts using that job's capacity before transport cleanup.
-A body abort/error remains a safe failure, not a retry. Ordinary target errors
+A body abort/error is eligible only for explicit transient retries below. Ordinary target errors
 continue scheduling remaining ready work. Internal scheduler/work exceptions
 stop new dispatch and drain already-started work before a safe `INTERNAL` error;
 there is no final batch report in that exceptional path, and saved files remain.
@@ -463,14 +463,14 @@ No pending follower promises or per-queue timers need cancellation.
 
 This is **not** a CLI signal/cancellation protocol. SIGINT/SIGTERM, crashes and
 power loss can leave partial files (including temporary files), without a final
-report or a promise to drain. No rollback, resume, target restart, retries or
+report or a promise to drain. No rollback, resume, target restart or
 rate-limit handling is added. The trusted-parent, exclusive-directory and
 per-file no-overwrite guarantees stay unchanged. A concurrent set is not atomic,
 not necessarily observed at one instant, and not guaranteed jointly canonical.
 
 ### Resource and time bounds
 
-All per-target and group request counts/deadlines above are unchanged. For M
+Concurrency alone leaves the no-retry request counts/deadlines above unchanged. For M
 selected targets, G groups, genesis g and selector cost s, independent total is
 `M*(8+s+2*g)+C+B`; shared total is `G*(2+g+s)+M*(9+2*g)+C+B`. Here C counts eligible
 implementation code requests and B eligible beacon calls. Their deadline sums
@@ -488,3 +488,72 @@ is introduced. At most N requests' response bodies, target/implementation pairs 
 writer temporary files are active (N ≤ 8). Published files remain capped at 32
 and 24 MiB total; temporary files add at most N times the 768 KiB cap. Each code
 blob, response and file retains its existing individual cap.
+
+## Retry and capture deadline budgets
+
+Both live capture commands accept `--retries N` (canonical single ASCII digit
+0–3, default 0) and `--deadline-ms D` (canonical ASCII decimal 100–600000 ms).
+Positive N requires explicit D; D alone and N=0 with D are supported. These are
+CLI-only options: neither is accepted in target definitions, config roots or
+offline commands. Parse and reject duplicates, missing/invalid values, pairing
+and existing mode conflicts before reading selected env or creating output.
+Validation uses `RETRIES_OPTION`, `DEADLINE_OPTION`, `RETRIES_DEADLINE` or the
+existing `USAGE` code, without echoing inputs. Omitted options and explicit zero
+without D preserve all older traces/budgets/errors. Config schema stays v1;
+snapshot v1/v2/v4 and closed batch report v1/v2 have no new fields.
+
+Only transport/attempt-timeout and HTTP 502/503/504 failures are eligible for
+up to N retries of that logical read. Wait 100/200/400 ms before retries 1/2/3;
+there is no jitter, Retry-After handling or 429 retry. Every other HTTP status,
+redirect, HTTP parser/header/encoding/body-size/envelope failure, JSON-RPC error,
+null/malformed result, identity/canonical check and local filesystem error is
+permanent. Same method/params and new ID per attempt preserve hash/height/genesis
+decisions; never restart a target or group resolver. Exhaustion returns the last
+safe original RPC code, except that an exhausted D takes priority as fixed
+`CAPTURE_DEADLINE`. See the [full policy](PROTOCOL.md#transient-retries-and-active-capture-deadline).
+
+Let M be selected targets (1–32), G expected-chain groups, g=1 with genesis else
+0, s=1 for hash/positive depth else 0, C eligible implementation-code reads and
+B eligible beacon calls. Let R be retries (0–3), T the ordinary attempt timeout,
+and W(R)=100*(2^R−1) ms, or 0/100/300/700 ms. Define ordinary logical reads O:
+
+| Mode | O | Beacon logical reads |
+| --- | --- | --- |
+| Single | `8+s+2*g+C` (C≤1) | B≤1 |
+| Independent batch | `M*(8+s+2*g)+C` | B≤M |
+| Shared batch | `G*(2+g+s)+M*(9+2*g)+C` | B≤M |
+
+Maximum wire attempts are `(R+1)*(O+B)`. Their maximum scheduled timeout-plus-
+backoff sum, before clipping to remaining deadlines, is
+`(R+1)*(O*T+B*min(T,5000))+(O+B)*W(R)` milliseconds. These are upper bounds:
+each read stops retrying immediately after success, and permanent failures
+truncate the sequence. A failed read adds only its actual attempts; unreached
+reads add zero. Bad env and unavailable-group followers consume zero requests.
+File failures occur after capture and add no RPC or retry.
+
+For one capture with its applicable O/B, the scheduled RPC/delay allowance is
+bounded by the smaller of D and the formula above. A shared leader includes
+its group's `2+g+s` resolver reads in that same allowance; a follower includes
+only its `9+2*g` capture reads plus eligible C/B. **Do not add a new D for group
+resolution.** The sum of active capture allowances for the whole batch is at
+most M*D (and at most the un-clipped formula). It is not a process wall-time
+bound or that sum divided by concurrency: queue/anchor wait, event-loop delays,
+transport-close cleanup and filesystem time prevent that interpretation.
+
+D starts on actual target admission, before the selected endpoint lookup. A
+follower's queue/anchor wait is excluded. Resolution and capture share the
+leader's end time; success never resets it. Every attempt is capped by remaining
+time, including body receipt, with beacon still ≤5000 ms, 100000 gas and 4 KiB.
+Deadline exhaustion destroys the current request or ends a shortened delay;
+close completes before release. No retry or delay escapes its original worker,
+so global active requests remain ≤ concurrency (1–8). Validation and the final
+handoff to the writer check time again. Filesystem publication is outside D.
+
+A deadline during resolution marks only that group unavailable; its followers
+receive `SHARED_BLOCK_UNAVAILABLE` with no env access. A later leader deadline
+leaves the resolved anchor usable by followers. Other groups/targets continue;
+successful files, ordinal names and input report/group order remain. No raw
+endpoint/status/provider error, retry metadata or extra timing field is saved.
+This does not add a CLI signal/drain protocol, rollback or resumption. Re-running
+a batch still requires a new output directory; completed files can be inspected,
+compared and migrated offline under the existing contracts.

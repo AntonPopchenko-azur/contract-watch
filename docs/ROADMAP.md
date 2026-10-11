@@ -20,7 +20,8 @@ Item 19 adds explicit single-target local configuration on 2026-10-06.
 Item 20 adds explicit sequential multi-target capture on 2026-10-06.
 Item 21 adds opt-in shared blocks per expected-chain group on 2026-10-07.
 Item 22 adds bounded concurrent batch admission on 2026-10-10.
-Items 23–45 have not started.
+Item 23 adds opt-in transient retries and active capture deadlines on 2026-10-11.
+Items 24–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -176,10 +177,23 @@ There is no worker-owned scheduler or automatic endless backlog.
   cancellation/partial-output limits. No CLI interrupt workflow or retries.
   Completed 2026-10-10.
 
+- [x] **23 — Transient-failure retry policy.** Add CLI-only --retries 0–3 and
+  --deadline-ms 100–600000, requiring a deadline for positive retries. Retry only
+  transport/timeouts and HTTP 502/503/504 with bounded 100/200/400 ms delays,
+  unchanged method/params and fresh IDs; preserve the original pin and every
+  identity/canonical/final check. One monotonic budget spans an active capture,
+  including shared leader resolution; followers exclude queue/anchor wait.
+  Close transports before retries/release, keep retry delays in their worker,
+  and use fixed CAPTURE_DEADLINE on exhaustion. Defaults/explicit zero preserve
+  old traces and errors; config/snapshot/report formats stay unchanged. Tests
+  cover fake time, real transport closure/concurrency, permanent failures,
+  selector/feature combinations, shared failure phases, partial files, early
+  validation and offline reuse. Document exact attempt/backoff budgets and
+  capture-versus-filesystem/process limits. No 429 or signal/rollback workflow.
+  Completed 2026-10-11.
+
 ## Planned increments
 
-- [ ] **23 — Transient-failure retry policy.** Add opt-in limited retries and
-  overall deadlines, preserving the same block and redacted errors.
 - [ ] **24 — Provider rate-limit handling.** Respect bounded retry delays for
   429 responses and verify delay cancellation without real timers in tests.
 - [ ] **25 — Explicit cancellation.** Handle user interrupts with prompt request

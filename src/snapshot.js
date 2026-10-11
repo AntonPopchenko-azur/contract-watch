@@ -7,6 +7,7 @@ import { fail } from './errors.js';
 import { createRpc } from './rpc.js';
 import { resolveBeacon, decodeBeaconResult } from './beacon.js';
 import { captureImplementation, implementationSelection } from './implementation.js';
+import { capturePolicy } from './capture-policy.js';
 
 // https://eips.ethereum.org/EIPS/eip-1967
 export const SLOTS = Object.freeze({
@@ -74,13 +75,16 @@ async function selectBlock(rpc, { hash, distance, tag }) {
 // public observations survive this phase; no endpoint or RPC client is retained.
 export async function resolveCaptureAnchor(options) {
   const input = captureInput(options);
-  const rpc = createRpc(options.rpcUrl, options.timeoutMs);
-  if (BigInt(quantity(await rpc('eth_chainId'))).toString() !== input.expected) fail('CHAIN_MISMATCH');
-  const genesis = options.genesis ? await genesisHash(rpc) : undefined;
-  const block = await selectBlock(rpc, input);
-  if (genesis && block.number === '0x0' && block.hash !== genesis) fail('GENESIS_CHANGED');
-  return Object.freeze({ chainId: input.expected, block: Object.freeze(block),
-    ...(genesis ? { genesis } : {}) });
+  const policy = capturePolicy(options);
+  return policy.guard(async () => {
+    const rpc = createRpc(options.rpcUrl, options.timeoutMs, policy);
+    if (BigInt(quantity(await rpc('eth_chainId'))).toString() !== input.expected) fail('CHAIN_MISMATCH');
+    const genesis = options.genesis ? await genesisHash(rpc) : undefined;
+    const block = await selectBlock(rpc, input);
+    if (genesis && block.number === '0x0' && block.hash !== genesis) fail('GENESIS_CHANGED');
+    return Object.freeze({ chainId: input.expected, block: Object.freeze(block),
+      ...(genesis ? { genesis } : {}) });
+  });
 }
 
 export async function captureAtAnchor(options, anchor, { includeBeacon = false, includeImplementation = false } = {}) {
@@ -100,35 +104,38 @@ async function captureObservation(options, includeBeacon, includeImplementation 
   const { rpcUrl, timeoutMs = 10000, genesis = false } = options;
   const input = captureInput(options);
   const { target, expected } = input;
-  const rpc = createRpc(rpcUrl, timeoutMs);
-  const actual = BigInt(quantity(await rpc('eth_chainId'))).toString();
-  if (actual !== expected) fail('CHAIN_MISMATCH');
-  const initialGenesis = genesis ? await genesisHash(rpc) : undefined;
-  if (anchor && anchor.chainId !== expected) fail('CHAIN_MISMATCH');
-  if (anchor && genesis && initialGenesis !== anchor.genesis) fail('SHARED_GENESIS_MISMATCH');
-  const pinned = anchor ? await confirmAnchor(rpc, anchor.block) : await selectBlock(rpc, input);
-  if (genesis && pinned.number === '0x0' && pinned.hash !== initialGenesis) fail('GENESIS_CHANGED');
-  const selector = { blockHash: pinned.hash, requireCanonical: true };
-  const code = data(await rpc('eth_getCode', [target, selector]));
-  const slots = {};
-  for (const [name, position] of Object.entries(SLOTS)) {
-    slots[name] = data(await rpc('eth_getStorageAt', [target, position, selector]), 32);
-  }
-  const beaconResolution = includeBeacon ? await resolveBeacon(rpc, target, code, slots, pinned.hash) : undefined;
-  const implementation = includeImplementation
-    ? await captureImplementation(rpc, target, code, slots, pinned.hash) : undefined;
-  // A late reorg cannot mix state (all reads use a hash); detect canonical changes too.
-  const confirmed = blockHeader(await rpc('eth_getBlockByNumber', [pinned.number, false]));
-  if (confirmed.number !== pinned.number || confirmed.hash !== pinned.hash) fail('BLOCK_CHANGED');
-  if (genesis && await genesisHash(rpc) !== initialGenesis) fail('GENESIS_CHANGED');
-  if (BigInt(quantity(await rpc('eth_chainId'))).toString() !== expected) fail('CHAIN_MISMATCH');
-  const snapshot = {
-    schemaVersion: genesis ? 4 : includeImplementation ? 2 : 1, source: 'rpc', capturedAt: new Date().toISOString(),
-    chainId: expected, address: target, block: pinned, code, slots,
-    ...(includeImplementation ? { implementation } : genesis ? { implementation: { status: 'not-recorded' } } : {}),
-    ...(genesis ? { genesis: { status: 'observed', hash: initialGenesis } } : {})
-  };
-  return { snapshot, beaconResolution };
+  const policy = capturePolicy(options);
+  return policy.guard(async () => {
+    const rpc = createRpc(rpcUrl, timeoutMs, policy);
+    const actual = BigInt(quantity(await rpc('eth_chainId'))).toString();
+    if (actual !== expected) fail('CHAIN_MISMATCH');
+    const initialGenesis = genesis ? await genesisHash(rpc) : undefined;
+    if (anchor && anchor.chainId !== expected) fail('CHAIN_MISMATCH');
+    if (anchor && genesis && initialGenesis !== anchor.genesis) fail('SHARED_GENESIS_MISMATCH');
+    const pinned = anchor ? await confirmAnchor(rpc, anchor.block) : await selectBlock(rpc, input);
+    if (genesis && pinned.number === '0x0' && pinned.hash !== initialGenesis) fail('GENESIS_CHANGED');
+    const selector = { blockHash: pinned.hash, requireCanonical: true };
+    const code = data(await rpc('eth_getCode', [target, selector]));
+    const slots = {};
+    for (const [name, position] of Object.entries(SLOTS)) {
+      slots[name] = data(await rpc('eth_getStorageAt', [target, position, selector]), 32);
+    }
+    const beaconResolution = includeBeacon ? await resolveBeacon(rpc, target, code, slots, pinned.hash) : undefined;
+    const implementation = includeImplementation
+      ? await captureImplementation(rpc, target, code, slots, pinned.hash) : undefined;
+    // A late reorg cannot mix state (all reads use a hash); detect canonical changes too.
+    const confirmed = blockHeader(await rpc('eth_getBlockByNumber', [pinned.number, false]));
+    if (confirmed.number !== pinned.number || confirmed.hash !== pinned.hash) fail('BLOCK_CHANGED');
+    if (genesis && await genesisHash(rpc) !== initialGenesis) fail('GENESIS_CHANGED');
+    if (BigInt(quantity(await rpc('eth_chainId'))).toString() !== expected) fail('CHAIN_MISMATCH');
+    const snapshot = {
+      schemaVersion: genesis ? 4 : includeImplementation ? 2 : 1, source: 'rpc', capturedAt: new Date().toISOString(),
+      chainId: expected, address: target, block: pinned, code, slots,
+      ...(includeImplementation ? { implementation } : genesis ? { implementation: { status: 'not-recorded' } } : {}),
+      ...(genesis ? { genesis: { status: 'observed', hash: initialGenesis } } : {})
+    };
+    return { snapshot, beaconResolution };
+  });
 }
 
 function keys(value, expected) {

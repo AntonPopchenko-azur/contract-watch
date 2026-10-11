@@ -52,7 +52,8 @@ export function depth(value) {
 // Shared by capture and config selection so local options can be checked before
 // resolving a secret-bearing environment value. Preserve original address casing.
 export function captureInput({ address: inputAddress, chainId: expectedChain,
-  block, blockHash: inputHash, depth: inputDepth, strictChecksum = false, genesis = false }) {
+  block, blockHash: inputHash, depth: inputDepth, strictChecksum = false, genesis = false, retries, deadlineMs }) {
+  retryOptions({ retries, deadlineMs });
   if (typeof genesis !== 'boolean') fail('USAGE');
   if ([block, inputHash, inputDepth].filter(value => value !== undefined).length > 1) fail('USAGE');
   const target = address(inputAddress, { strictChecksum });
@@ -94,4 +95,23 @@ export function timeout(value = '10000') {
 export function concurrency(value = '1') {
   if (typeof value !== 'string' || !/^[1-8]$/.test(value)) fail('CONCURRENCY');
   return Number(value);
+}
+
+export function retries(value = '0') {
+  if (typeof value !== 'string' || !/^[0-3]$/.test(value)) fail('RETRIES_OPTION');
+  return Number(value);
+}
+
+export function deadline(value) {
+  if (typeof value !== 'string' || !/^[1-9][0-9]{2,5}$/.test(value) ||
+      Number(value) > 600000) fail('DEADLINE_OPTION');
+  return Number(value);
+}
+
+// Numeric values are used internally; CLI spelling is checked before conversion.
+export function retryOptions({ retries: count = 0, deadlineMs } = {}) {
+  const result = { retries: retries(typeof count === 'number' ? String(count) : count),
+    deadlineMs: deadlineMs === undefined ? undefined : deadline(typeof deadlineMs === 'number' ? String(deadlineMs) : deadlineMs) };
+  if (result.retries > 0 && result.deadlineMs === undefined) fail('RETRIES_DEADLINE');
+  return result;
 }

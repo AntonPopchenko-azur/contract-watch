@@ -32,7 +32,7 @@ failures then become individual ordinal outcomes and do not undo successful file
 Default concurrency 1 is sequential. By default every target independently selects its own
 block and performs the full sequence below, including all canonical/chain/genesis rechecks.
 Even a shared endpoint does not imply a shared block or instant. Concurrency
-requires explicit `--concurrency`; no RPC batching or retries are performed. The request
+requires explicit `--concurrency`; no RPC batching is performed. Without opt-in retries, the request
 budget is the sum of per-target budgets (maximum 13*N requests and
 N*(12*T+min(T,5000)) ms of request deadlines); local file work is outside it.
 
@@ -77,7 +77,9 @@ Each member, including the leader, then executes a fresh capture:
 
 The leader endpoint is read once for resolution plus capture, with no second env
 getter and no retained credential/client cache. Resolution and each capture use
-separate RPC request-ID sequences. Each capture remains sequential; the
+separate RPC request-ID sequences by default. With an explicit deadline, the
+leader uses one increasing ID sequence across resolution and capture; each
+attempt has a new ID, including retries. Each capture remains sequential; the
 [concurrency protocol](#bounded-concurrency-protocol) allows multiple ready
 captures only when explicitly requested.
 A target's capture/save failure never invalidates or replaces a resolved anchor.
@@ -123,6 +125,74 @@ change; memory and temporary files scale with the active-job cap. See the
 [concurrency contract](CONFIGURATION.md#bounded-concurrency) for exact bounds,
 queue semantics and cancellation/partial-output limits. No common instant,
 whole-set canonicality or atomic transaction is promised.
+
+## Transient retries and active capture deadline
+
+`snapshot` and `snapshot-many` accept CLI-only `--retries` (one ASCII digit 0–3,
+default 0) and `--deadline-ms` (canonical ASCII decimal 100–600000). Positive
+retries require an explicit deadline; a deadline alone is valid. Validate both
+and their pairing before environment access, requests or output creation.
+Unknown/duplicate/missing flags give `USAGE`; invalid values give
+`RETRIES_OPTION` or `DEADLINE_OPTION`; missing required deadline gives
+`RETRIES_DEADLINE`. Config fields and offline command syntax remain closed.
+No options, and explicit zero without a deadline, retain old traces, errors,
+request budgets and formats.
+
+A logical read may make at most 1+N attempts. Retry only connection/transport
+failures (including incomplete bodies), attempt timeout, and HTTP 502/503/504.
+Internal retry eligibility never includes status/body/endpoint in public errors.
+HTTP parser errors (including oversized headers) are permanent; they retain
+the safe legacy `RPC_NETWORK` code. All other HTTP statuses, including 429 and
+redirects, are permanent; Retry-After is ignored. Encoding/body-size/envelope
+failures, JSON-RPC errors, malformed/null results, identity/canonical mismatches
+and local file failures remain permanent. Reverts and unsupported EIP-1898
+therefore never cause retries or fallback. The classification is a local bounded
+policy, not a guarantee that any given server error will recover.
+
+The only delays are 100/200/400 ms before retry 1/2/3, bounded by remaining
+capture time. Await request close before beginning a delay or another attempt.
+Each attempt has a fresh ID and identical serialized method/params. A successful
+read is never repeated as a recovery step: no whole-capture restart, leader
+re-resolution, refreshed latest head, changed computed height or substituted
+genesis/pin. All EIP-1898 `requireCanonical` and final checks still execute.
+Without a deadline IDs retain the old per-client sequence; with a deadline a
+shared leader's resolver/capture use one sequence. Different targets remain
+separate clients and may have equal IDs.
+
+One monotonic `performance.now()` budget starts when capture becomes active.
+In a batch it starts at actual target admission, before its environment lookup;
+blocked followers do not read env or start a budget. Shared resolver and leader
+capture share the same context and end time. Followers get independent end
+times after queue/anchor wait. Every request/retry and delay consumes this same
+budget. Retry waiting keeps the target worker occupied; no new concurrency slot
+is created. An attempt timeout is `min(T, remaining)`; beacon adds the existing
+5000 ms ceiling and unchanged gas/body restrictions.
+
+Check remaining time before each attempt, after transport completion/envelope
+validation, after capture validation (including error paths), and before
+persistence. Intermediate result validation is followed by a check before the
+next request or capture return. Exhaustion closes the transport or ends the
+bounded delay and starts no new request. `CAPTURE_DEADLINE` is a distinct fixed
+message and wins if the budget is also exhausted when another error or retry
+exhaustion is observed. Otherwise exhausted retries return the last original
+safe RPC error; there is no raw provider status/message in reports.
+
+These are scheduled capture limits, not hard real-time guarantees: event-loop
+delays and transport-close cleanup can finish after the nominal deadline.
+Config, filesystem persistence and whole-batch/process lifetime are outside it.
+Once handed to persistence, a complete validated snapshot uses the same writer;
+no file-operation retries, rollback, signal handling or atomic-set claim is
+added. Failure before resolver completion makes that group unavailable; after
+resolution it affects only that target, retaining the anchor and saved files.
+Reports and saved snapshot schemas are unchanged. Exact formulas and failure
+prefixes are in [retry budgets](CONFIGURATION.md#retry-and-capture-deadline-budgets).
+
+Runtime behavior was checked on 2026-10-11 against primary
+[Node.js monotonic timing](https://nodejs.org/api/perf_hooks.html#performancenow),
+[HTTP request destruction](https://nodejs.org/api/http.html#requestdestroyerror)
+and [HTTP server status semantics](https://www.rfc-editor.org/rfc/rfc9110.html#name-server-error-5xx).
+Tests combine injected monotonic time for budget/delay decisions with real
+loopback request closure, concurrency and CLI partial-output checks.
 
 ## Address checksum
 
@@ -271,9 +341,10 @@ The hash selector follows [EIP-1898](https://eips.ethereum.org/EIPS/eip-1898).
 It makes the state reads refer to the same block even across a head change.
 The final recheck detects a reorg at that point, not permanent finality. An
 unsupported selector, unavailable historical state, or provider error aborts
-capture. No fallback, retry, batch, or write method is used.
+capture unless an eligible transient read recovers under the opt-in retry
+policy below. No fallback, RPC batch, or write method is used.
 
-Before opt-in observations, successful tag/number captures and depth 0 make eight
+Without retries or opt-in observations, successful tag/number captures and depth 0 make eight
 sequential requests; hash selection and positive depth make nine. Their sum of request timeouts is
 bounded by eight or nine times the configured per-request timeout, respectively.
 An eligible beacon adds one request with timeout `min(timeoutMs, 5000)`: at most
@@ -363,7 +434,7 @@ existing safe error. No provider payload or bad ABI input is echoed.
 All state reads, including this call, use the identical EIP-1898 hash selector.
 The final canonical-block and chain checks run after the call. Any fatal error
 aborts capture without a snapshot or partial stdout. There is no gas estimation,
-retry, selector fallback, caller sweep, recursion, additional bytecode lookup,
+selector fallback, caller sweep, recursion, additional bytecode lookup,
 state override, signing or transaction submission. The generic RPC function
 still rejects `eth_call`; the dedicated operation constructs its fixed payload.
 
@@ -466,7 +537,7 @@ address is not a no-code observation. Only a valid address with an empty
 The extra code request uses `[observedAddress, {blockHash, requireCanonical:true}]`
 with the original hash, as specified for `eth_getCode` by
 [EIP-1898](https://eips.ethereum.org/EIPS/eip-1898). Its ordinary 1 MiB HTTP body,
-16 KiB header and `T` deadline limits remain. There is no arbitrary call, retry,
+16 KiB header and `T` attempt timeout limits remain. There is no arbitrary call,
 selector fallback, recursion or implementation storage lookup. A self-reference
 still receives exactly one additional code read. All additional reads precede
 the final canonical-block and chain checks; failures produce no new file and
@@ -569,7 +640,7 @@ number/tag/depth 0, base 11 for hash/positive depth. Direct implementation adds
 1 request / T, eligible live beacon adds 1 request / min(T,5000), beacon plus
 code adds 2 requests / (T+min(T,5000)); skips add none. Maximum: 13 requests and
 `12*T + min(T,5000)` ms. Depth underflow uses 3 requests with genesis. Failure
-stops at its request, with no retries, replacement identity, partial stdout or
+stops at its request after eligible retries, with no replacement identity, partial stdout or
 new snapshot. Local file work is outside request deadlines.
 
 Genesis is an additional provider observation, not cryptographic ancestry
@@ -918,6 +989,8 @@ not generate those expected results.
 | Codes | Meaning / action |
 | --- | --- |
 | `USAGE`, `ADDRESS`, `CHAIN_ID`, `BLOCK`, `RPC_URL`, `TIMEOUT_OPTION` | Correct local arguments; see `--help` |
+| `RETRIES_OPTION`, `DEADLINE_OPTION`, `RETRIES_DEADLINE` | Use retries 0–3 and canonical deadline 100–600000 ms; positive retries require a deadline |
+| `CAPTURE_DEADLINE` | Active capture budget exhausted; no further read or persistence is attempted |
 | `CHAIN_MISMATCH` | Verify the expected chain and chosen endpoint |
 | `GENESIS_CHANGED` | Genesis observations or selected block 0 disagree during capture |
 | `GENESIS_MISMATCH` | Recorded genesis hashes differ; do not compare as one network |

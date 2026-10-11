@@ -3,13 +3,15 @@ import { join, resolve } from 'node:path';
 import { MAX_CONFIG_TARGETS, readConfig, prepareConfiguredCapture, configuredEndpoint } from './config.js';
 import { capture, captureWithBeacon, captureWithImplementation, saveSnapshot,
   resolveCaptureAnchor, captureAtAnchor } from './snapshot.js';
-import { address, chainId } from './validate.js';
+import { address, chainId, retryOptions } from './validate.js';
 import { errorDetails, fail } from './errors.js';
 import { runReady } from './scheduler.js';
+import { startCapture, capturePolicy } from './capture-policy.js';
 
 export async function captureMany({ configPath, names, outputDir, options = {},
   includeBeacon = false, includeImplementation = false, sharedBlock = false, concurrency = 1 }, environment = process.env) {
   if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) fail('CONCURRENCY');
+  retryOptions(options);
   if (!Array.isArray(names) || names.length < 1 || names.length > MAX_CONFIG_TARGETS ||
       new Set(names).size !== names.length) fail('BATCH_TARGETS');
   if (typeof sharedBlock !== 'boolean' || typeof includeBeacon !== 'boolean' || typeof includeImplementation !== 'boolean' ||
@@ -44,7 +46,8 @@ export async function captureMany({ configPath, names, outputDir, options = {},
       if (group?.status === 'unavailable') fail('SHARED_BLOCK_UNAVAILABLE');
       let input;
       try {
-        input = { ...selected.capture, rpcUrl: configuredEndpoint(selected.rpcEnv, environment) };
+        input = startCapture(selected.capture);
+        input.rpcUrl = configuredEndpoint(selected.rpcEnv, environment);
         if (group?.leaderOrdinal === index + 1) {
           group.anchor = await resolveCaptureAnchor(input);
           group.status = 'resolved';
@@ -63,6 +66,7 @@ export async function captureMany({ configPath, names, outputDir, options = {},
         ? { snapshot: await captureWithImplementation(input) }
         : includeBeacon ? await captureWithBeacon(input) : { snapshot: await capture(input) };
       const file = `target-${String(index + 1).padStart(2, '0')}.json`;
+      capturePolicy(input).check();
       await saveSnapshot(join(directory, file), snapshot);
       outcomes[index] = { ...identity, status: 'saved', file, snapshotVersion: snapshot.schemaVersion,
         block: snapshot.block, ...(beaconResolution ? { beaconResolution } : {}) };

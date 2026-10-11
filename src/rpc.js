@@ -3,21 +3,30 @@ import https from 'node:https';
 import { WatchError, fail } from './errors.js';
 import { rpcUrl, timeout, address, blockHash } from './validate.js';
 import { BEACON_SELECTOR, BEACON_GAS, MAX_BEACON_RESPONSE_BYTES, MAX_BEACON_TIMEOUT_MS } from './beacon.js';
+import { createCapturePolicy } from './capture-policy.js';
 
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
 const READ_METHODS = new Set([
   'eth_chainId', 'eth_getBlockByNumber', 'eth_getBlockByHash', 'eth_getCode', 'eth_getStorageAt'
 ]);
 
-export function createRpc(endpoint, timeoutMs = 10000) {
+export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePolicy()) {
   const url = rpcUrl(endpoint);
   timeout(String(timeoutMs));
   let nextId = 0;
+  const transient = new WeakSet();
 
   async function requestRpc(method, params, maxBytes = MAX_RESPONSE_BYTES, requestTimeout = timeoutMs) {
+    // Serialize params once; retries cannot mutate the logical read or selector.
+    const encodedParams = JSON.stringify(params);
+    return policy.read((limit, deadlineLimited) => attemptRpc(method, encodedParams, maxBytes, limit, deadlineLimited),
+      requestTimeout, error => transient.has(error));
+  }
+
+  async function attemptRpc(method, encodedParams, maxBytes, requestTimeout, deadlineLimited) {
     const sizeCode = method === 'eth_call' ? 'BEACON_SIZE' : 'RPC_SIZE';
-    const id = ++nextId;
-    const payload = JSON.stringify({ jsonrpc: '2.0', id, method, params });
+    const id = policy.nextId ? policy.nextId() : ++nextId;
+    const payload = `{"jsonrpc":"2.0","id":${id},"method":${JSON.stringify(method)},"params":${encodedParams}}`;
     return new Promise((resolve, reject) => {
       let settled = false;
       let request;
@@ -34,8 +43,12 @@ export function createRpc(endpoint, timeoutMs = 10000) {
         if (!request || request.closed) publish();
         else if (error) request.destroy();
       };
-      const stop = code => finish(new WatchError(code));
-      timer = setTimeout(() => stop('RPC_TIMEOUT'), requestTimeout);
+      const stop = (code, retryable = code === 'RPC_NETWORK' || code === 'RPC_TIMEOUT') => {
+        const error = new WatchError(code);
+        if (retryable) transient.add(error);
+        finish(error);
+      };
+      timer = setTimeout(() => stop(deadlineLimited ? 'CAPTURE_DEADLINE' : 'RPC_TIMEOUT'), Math.ceil(requestTimeout));
       try {
         request = (url.protocol === 'https:' ? https : http).request(url, {
           method: 'POST',
@@ -48,7 +61,9 @@ export function createRpc(endpoint, timeoutMs = 10000) {
             'content-length': Buffer.byteLength(payload)
           }
         }, response => {
-          if (response.statusCode !== 200) { stop('RPC_HTTP'); response.destroy(); return; }
+          if (response.statusCode !== 200) {
+            stop('RPC_HTTP', [502, 503, 504].includes(response.statusCode)); response.destroy(); return;
+          }
           const encoding = response.headers['content-encoding'];
           if (encoding && encoding !== 'identity') { stop('RPC_ENCODING'); response.destroy(); return; }
           if (Number(response.headers['content-length']) > maxBytes) {
@@ -77,7 +92,7 @@ export function createRpc(endpoint, timeoutMs = 10000) {
             } catch { stop('RPC_ENVELOPE'); }
           });
         });
-        request.on('error', () => stop('RPC_NETWORK'));
+        request.on('error', error => stop('RPC_NETWORK', !String(error.code).startsWith('HPE_')));
         request.on('close', () => {
           if (!settled) stop('RPC_NETWORK');
           else publish();
