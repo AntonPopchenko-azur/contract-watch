@@ -54,7 +54,10 @@ Batch accepts common capture flags; no --address/--chain-id/--rpc/--out override
 Default/1 is sequential; larger limits run ready targets concurrently, with ordered outcomes.
 Report v1 (independent) or v2 (shared) and snapshot formats do not change with concurrency.
 Shared followers wait without occupying workers; all started work finishes before the report.
-Retries cover transport/timeouts and HTTP 502/503/504 only; no 429 handling.
+Retries cover transport/timeouts, HTTP 502/503/504 and HTTP 429.
+429 honors Retry-After seconds/HTTP-date up to 30s; excessive waits fail without retry.
+Missing/invalid non-comma headers use 100/200/400 ms; ambiguous/oversized fields fail.
+Default/zero retries still fail immediately on 429. No provider-wide queue.
 No rollback or CLI interrupt/drain guarantee. Partial files survive failures.
 Shared mode resolves from each group's first selection, then every RPC checks that anchor.
 An unavailable anchor blocks its group without fallback; other groups continue.

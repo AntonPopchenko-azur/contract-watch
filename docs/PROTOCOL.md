@@ -139,18 +139,18 @@ No options, and explicit zero without a deadline, retain old traces, errors,
 request budgets and formats.
 
 A logical read may make at most 1+N attempts. Retry only connection/transport
-failures (including incomplete bodies), attempt timeout, and HTTP 502/503/504.
+failures (including incomplete bodies), attempt timeout, and HTTP 502/503/504/429.
 Internal retry eligibility never includes status/body/endpoint in public errors.
 HTTP parser errors (including oversized headers) are permanent; they retain
-the safe legacy `RPC_NETWORK` code. All other HTTP statuses, including 429 and
-redirects, are permanent; Retry-After is ignored. Encoding/body-size/envelope
+the safe legacy `RPC_NETWORK` code. All other HTTP statuses, including
+redirects, are permanent. Retry-After is used only on 429. Encoding/body-size/envelope
 failures, JSON-RPC errors, malformed/null results, identity/canonical mismatches
 and local file failures remain permanent. Reverts and unsupported EIP-1898
 therefore never cause retries or fallback. The classification is a local bounded
 policy, not a guarantee that any given server error will recover.
 
-The only delays are 100/200/400 ms before retry 1/2/3, bounded by remaining
-capture time. Await request close before beginning a delay or another attempt.
+Delays are 100/200/400 ms before retry 1/2/3, except accepted 429 minimums below,
+all bounded by remaining capture time. Await request close before a delay or another attempt.
 Each attempt has a fresh ID and identical serialized method/params. A successful
 read is never repeated as a recovery step: no whole-capture restart, leader
 re-resolution, refreshed latest head, changed computed height or substituted
@@ -193,6 +193,70 @@ Runtime behavior was checked on 2026-10-11 against primary
 and [HTTP server status semantics](https://www.rfc-editor.org/rfc/rfc9110.html#name-server-error-5xx).
 Tests combine injected monotonic time for budget/delay decisions with real
 loopback request closure, concurrency and CLI partial-output checks.
+
+### HTTP 429 and Retry-After
+
+Positive retries enable this policy; default/zero retains immediate `RPC_HTTP`
+without parsing the header, consulting a wall clock or sleeping. The existing
+1+N limit counts all attempts of one read, even mixed transport/503/429 failures.
+No new options, provider queue, schemas or retry counters are exposed.
+
+For 429, inspect all raw header pairs under the unchanged 16 KiB header byte
+limit. With retries enabled, header-pair truncation is disabled to avoid hiding
+late duplicates. The parser additionally refuses arrays over 8192 entries and
+field values over 128 characters before numeric/date conversion. Duplicate
+Retry-After fields are refused even when their values agree. Values never
+become public error properties or persisted fields; only a bounded internal
+decision and monotonic not-before timestamp survive transport closure.
+
+| Header | Action with retry capacity available |
+| --- | --- |
+| One ASCII `1*DIGIT` value | Seconds, including zero and leading zeros; trim surrounding SP/HTAB only |
+| One valid HTTP-date | UTC wall-clock difference, floored at zero, converted once to a monotonic minimum |
+| Missing/empty/invalid value without a comma | Existing 100/200/400 ms backoff for overall retry 1/2/3 |
+| Duplicate fields, oversized value, or unparseable comma-bearing value | Refuse with `RPC_HTTP`, no wait or retry |
+| Valid delay >30000 ms, or minimum at/after capture end | Refuse with `RPC_HTTP`, no shortened wait or early retry |
+
+The parser accepts IMF-fixdate, RFC850 and asctime with exact case, spacing,
+UTC interpretation and calendar/weekday validation. It does not use permissive
+`Date.parse`. Two-digit RFC850 years use the rolling 50-year future boundary;
+a later timestamp maps to the latest past year with those last two digits.
+`23:59:60` maps conservatively to the following UTC second. Numbers are checked
+as bounded digit strings before conversion; negative/fractional/exponent/hex
+values are invalid. Malformed comma-bearing dates are refused because they
+cannot safely be distinguished from coalesced multiple values. A valid large
+minimum is never converted into a short fallback. `Retry-After: 0` and past
+dates add no sleep, but still require closure and remaining capture budget.
+
+Dates use an injectable wall clock at header receipt; conversion fixes the
+minimum on the monotonic capture clock, which also owns the unchanged deadline.
+Local wall-clock accuracy matters; subsequent clock corrections do not move an
+already calculated wait. After any early wake, recheck the deadline and wait
+the remaining minimum before another attempt. Timer rounding may lengthen a
+wait, never authorize an early retry. If scheduling overruns the deadline, fixed
+`CAPTURE_DEADLINE` wins over other errors. A minimum that cannot fit is refused
+immediately as `RPC_HTTP` while time still remains. Exhaustion also keeps the
+last safe RPC error. Retry-After on 502/503/504 remains ignored, preserving their
+100/200/400 ms backoff.
+
+The internal injected sleep accepts an AbortSignal; production sleep uses
+Node's cancellable promise timer. Aborting a pending retry wait removes its
+timer/listener, yields fixed `RETRY_CANCELLED`, and prevents later attempts.
+Abort reasons are never exposed. A simultaneous expired deadline takes priority.
+Tests drive cancellation, early wakes and deadline exhaustion without real
+delay timers, and separately check real loopback transport closure. This is an
+internal wait interface, not CLI signal handling, prompt in-flight capture
+cancellation, rollback or a batch drain protocol; those remain item 25.
+Every wait remains in its admitted target worker, including shared resolver
+waits. Resolved anchors and already published files retain the old failure rules.
+
+Reviewed on 2026-10-12 against
+[RFC 6585 §4](https://www.rfc-editor.org/rfc/rfc6585.html#section-4),
+[RFC 9110 §10.2.3](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3) and
+[§5.6.7](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.6.7), plus
+[Node HTTP header limits](https://nodejs.org/api/http.html#requestmaxheaderscount)
+and [cancellable timers](https://nodejs.org/api/timers.html#timerspromisessettimeoutdelay-value-options).
+The 30-second cap, fallback and ambiguous-field refusal are local policy choices.
 
 ## Address checksum
 
@@ -991,6 +1055,7 @@ not generate those expected results.
 | `USAGE`, `ADDRESS`, `CHAIN_ID`, `BLOCK`, `RPC_URL`, `TIMEOUT_OPTION` | Correct local arguments; see `--help` |
 | `RETRIES_OPTION`, `DEADLINE_OPTION`, `RETRIES_DEADLINE` | Use retries 0–3 and canonical deadline 100–600000 ms; positive retries require a deadline |
 | `CAPTURE_DEADLINE` | Active capture budget exhausted; no further read or persistence is attempted |
+| `RETRY_CANCELLED` | Internal retry wait aborted; no further attempt, no raw abort reason |
 | `CHAIN_MISMATCH` | Verify the expected chain and chosen endpoint |
 | `GENESIS_CHANGED` | Genesis observations or selected block 0 disagree during capture |
 | `GENESIS_MISMATCH` | Recorded genesis hashes differ; do not compare as one network |

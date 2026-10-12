@@ -14,13 +14,13 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
   const url = rpcUrl(endpoint);
   timeout(String(timeoutMs));
   let nextId = 0;
-  const transient = new WeakSet();
+  const transient = new WeakMap();
 
   async function requestRpc(method, params, maxBytes = MAX_RESPONSE_BYTES, requestTimeout = timeoutMs) {
     // Serialize params once; retries cannot mutate the logical read or selector.
     const encodedParams = JSON.stringify(params);
     return policy.read((limit, deadlineLimited) => attemptRpc(method, encodedParams, maxBytes, limit, deadlineLimited),
-      requestTimeout, error => transient.has(error));
+      requestTimeout, error => transient.get(error));
   }
 
   async function attemptRpc(method, encodedParams, maxBytes, requestTimeout, deadlineLimited) {
@@ -45,7 +45,7 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
       };
       const stop = (code, retryable = code === 'RPC_NETWORK' || code === 'RPC_TIMEOUT') => {
         const error = new WatchError(code);
-        if (retryable) transient.add(error);
+        if (retryable) transient.set(error, retryable);
         finish(error);
       };
       timer = setTimeout(() => stop(deadlineLimited ? 'CAPTURE_DEADLINE' : 'RPC_TIMEOUT'), Math.ceil(requestTimeout));
@@ -62,7 +62,8 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
           }
         }, response => {
           if (response.statusCode !== 200) {
-            stop('RPC_HTTP', [502, 503, 504].includes(response.statusCode)); response.destroy(); return;
+            stop('RPC_HTTP', response.statusCode === 429 ? policy.rateLimit(response.rawHeaders)
+              : [502, 503, 504].includes(response.statusCode)); response.destroy(); return;
           }
           const encoding = response.headers['content-encoding'];
           if (encoding && encoding !== 'identity') { stop('RPC_ENCODING'); response.destroy(); return; }
@@ -92,6 +93,9 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
             } catch { stop('RPC_ENVELOPE'); }
           });
         });
+        // Preserve every header pair for duplicate Retry-After detection. The
+        // 16 KiB parser byte limit still bounds this list, including tiny fields.
+        if (policy.retryEnabled) request.maxHeadersCount = 0;
         request.on('error', error => stop('RPC_NETWORK', !String(error.code).startsWith('HPE_')));
         request.on('close', () => {
           if (!settled) stop('RPC_NETWORK');

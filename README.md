@@ -476,14 +476,32 @@ also be used alone. Duplicates, missing values, invalid values and conflicts
 fail before env/RPC/output. Neither option belongs in config or offline commands.
 Omitting both, or specifying only `--retries 0`, preserves previous behavior.
 
-Each logical read gets at most **1+N attempts**, with delays **100, 200, 400 ms**
-before successive retries. Only transport failures, attempt timeouts and HTTP
-**502/503/504** qualify. HTTP 429 (including Retry-After), other statuses,
+Each logical read gets at most **1+N attempts**. Transport failures, attempt
+timeouts and HTTP **502/503/504** use delays **100, 200, 400 ms** before successive
+retries. HTTP **429** uses the bounded Retry-After policy below. Other statuses,
 redirects, encoding/size/envelope errors, JSON-RPC errors, invalid/null results,
 chain/genesis/canonical mismatches and file errors are never retried. Exhaustion
 returns the original fixed safe error. Every attempt uses the same method and
 parameters with a fresh ID. Earlier successful reads are never restarted, so
 latest/depth selection, genesis and the pinned hash are not replaced.
+
+With positive retries, a single `Retry-After` on 429 accepts unsigned ASCII
+integer seconds (including zero/leading zeros), or an HTTP-date in IMF-fixdate,
+obsolete RFC850 or asctime format. Dates are UTC, validated for calendar/time/
+weekday consistency; RFC850 uses the 50-year rule. Zero and past dates permit
+an immediate next attempt after transport close. The maximum accepted delay is
+**30000 ms**. A larger valid minimum, or one reaching/exceeding the remaining
+capture deadline, ends with safe `RPC_HTTP` **without waiting or retrying early**.
+The delay is never clamped to a smaller value and followed by a retry.
+
+Missing, empty or invalid non-comma values use the same bounded 100/200/400 ms
+fallback, indexed by the overall retry number. Duplicate fields (even equal),
+unparseable comma-bearing values and values over 128 characters are refused
+with `RPC_HTTP`; these may hide conflicting or excessive minimums. No raw header
+or response body is printed or saved. Other statuses keep their old policy,
+including ignoring Retry-After on 503. Without retries, 429 remains an immediate
+`RPC_HTTP`, with no header parsing or wait. No new CLI/config field or global
+provider queue is introduced.
 
 The monotonic deadline covers one active capture, including all reads, retries
 and delays. A shared leader's resolver and capture share that budget; each
@@ -494,11 +512,18 @@ transport/delay ends and no new attempt starts: `CAPTURE_DEADLINE` takes priorit
 over a simultaneous request error or retry exhaustion. The engine checks time
 after results/validation and before handing a successful capture to the writer.
 Failed transports close before a retry starts. Retry delays retain their target
-worker, preserving the batch-wide concurrency cap.
+worker, preserving the batch-wide concurrency cap. An HTTP-date uses the local
+wall clock once at receipt to calculate a monotonic minimum; later wall-clock
+changes do not move it. Early timer wakes re-wait the remainder. Correct UTC on
+the local machine matters for date interpretation. Internal waits support abort
+signals and fixed `RETRY_CANCELLED` errors, tested with fake time; CLI
+SIGINT/SIGTERM and full capture cancellation remain a separate roadmap item.
 
 The counts below describe logical reads with retries disabled. With N retries,
-maximum attempts are **(1+N) × logical reads**; total backoff per logical read is
-0/100/300/700 ms for N=0/1/2/3. The deadline can stop that sequence sooner.
+maximum attempts are **(1+N) × logical reads**. Without accepted 429 minimums,
+total backoff per logical read is 0/100/300/700 ms for N=0/1/2/3. With them,
+the worst-case wait sum is **N × 30000 ms** per logical read, still bounded by
+the capture deadline. The deadline can stop that sequence sooner.
 See [exact request/time budgets](docs/CONFIGURATION.md#retry-and-capture-deadline-budgets).
 This is a capture budget, excluding config/output/file work, not a hard process
 or whole-batch wall-clock guarantee: event-loop and transport cleanup can run

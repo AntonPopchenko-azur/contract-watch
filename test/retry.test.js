@@ -156,7 +156,7 @@ test('retry exhaustion preserves safe original error and never adds attempts', a
 
 test('permanent HTTP, headers, encoding, size, envelope and JSON-RPC errors never retry', async t => {
   const cases = [
-    ...[201, 204, 301, 302, 307, 400, 401, 403, 404, 408, 429, 500, 501, 505].map(status => [String(status), 'RPC_HTTP', (r, res) => { res.writeHead(status, { location: 'http://PRIVATE_REDIRECT', 'Retry-After': '0' }); res.end(); }]),
+    ...[201, 204, 301, 302, 307, 400, 401, 403, 404, 408, 500, 501, 505].map(status => [String(status), 'RPC_HTTP', (r, res) => { res.writeHead(status, { location: 'http://PRIVATE_REDIRECT', 'Retry-After': '0' }); res.end(); }]),
     ['encoding', 'RPC_ENCODING', (r, res) => { res.writeHead(200, { 'content-encoding': 'gzip' }); res.end('PRIVATE_BODY'); }],
     ['declared size', 'RPC_SIZE', (r, res) => { res.writeHead(200, { 'content-length': 1048577 }); res.end(); }],
     ['stream size', 'RPC_SIZE', (r, res) => { res.writeHead(200); res.end('x'.repeat(1048577)); }],

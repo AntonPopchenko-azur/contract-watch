@@ -21,7 +21,8 @@ Item 20 adds explicit sequential multi-target capture on 2026-10-06.
 Item 21 adds opt-in shared blocks per expected-chain group on 2026-10-07.
 Item 22 adds bounded concurrent batch admission on 2026-10-10.
 Item 23 adds opt-in transient retries and active capture deadlines on 2026-10-11.
-Items 24–45 have not started.
+Item 24 adds bounded opt-in HTTP 429 waits and testable wait cancellation on 2026-10-12.
+Items 25–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -192,10 +193,22 @@ There is no worker-owned scheduler or automatic endless backlog.
   capture-versus-filesystem/process limits. No 429 or signal/rollback workflow.
   Completed 2026-10-11.
 
+- [x] **24 — Provider rate-limit handling.** Extend positive retries to HTTP
+  429 with bounded Retry-After integer seconds and all three HTTP-date formats.
+  Cap accepted minimums at 30000 ms; refuse excessive/deadline-incompatible,
+  duplicated, oversized or ambiguous values without an early retry. Document
+  missing/invalid-value backoff and preserve default/zero RPC_HTTP behavior,
+  other transient backoff, 1+N attempts, pins, fresh IDs and strict formats.
+  Convert wall-clock dates once to monotonic minimums; re-wait early wakes and
+  support internal cancellable sleeps without adding CLI signal handling.
+  Deterministic fake-clock tests cover date/number boundaries, malformed fields,
+  mixed failures, exhaustion, early wakes, deadline and abort cleanup. Loopback
+  tests cover transport closure, single/batch/shared/concurrency, private partial
+  files and offline reuse. Full test/check suites and demo pass. No provider-wide
+  queue, new config, rollback or item-25 lifecycle. Completed 2026-10-12.
+
 ## Planned increments
 
-- [ ] **24 — Provider rate-limit handling.** Respect bounded retry delays for
-  429 responses and verify delay cancellation without real timers in tests.
 - [ ] **25 — Explicit cancellation.** Handle user interrupts with prompt request
   cancellation and no partially published snapshot set.
 - [ ] **26 — Local history directory.** Store indexed observations under explicit

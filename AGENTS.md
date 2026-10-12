@@ -87,8 +87,16 @@ GitHub release page. Never replace an existing published tag.
   started work before reporting. Timeout/body errors must close request resources
   before retrying or releasing work. CLI-only --retries accepts 0–3 (default 0);
   positive values require --deadline-ms, canonical 100–600000 ms. Retry only
-  transport/timeouts and HTTP 502/503/504, at most 1+N attempts per logical read
-  with 100/200/400 ms delays, same parameters and fresh IDs. Never retry 429,
+  transport/timeouts and HTTP 502/503/504/429, at most 1+N attempts per logical read
+  with the same parameters and fresh IDs. Preserve 100/200/400 ms backoff except
+  429's bounded Retry-After: RFC integer seconds or all three HTTP-date formats,
+  at most 30000 ms, never clamp an excessive minimum and retry early. Refuse
+  a minimum reaching/exceeding the capture deadline, duplicate/ambiguous fields
+  and values over 128 characters. Missing/invalid non-comma values use the old
+  backoff. Default/zero still yields RPC_HTTP with no waits. Convert dates once
+  with an injectable wall clock; use monotonic minimum/deadline rechecks after
+  early wakes and cancellable internal sleeps. Do not install CLI signals or a
+  provider-wide scheduler. Never retry
   protocol/result/identity/canonical errors or file operations, restart captures,
   or replace pins. One monotonic active-capture budget includes resolver for
   shared leaders; followers start their own budget at admission, excluding queue

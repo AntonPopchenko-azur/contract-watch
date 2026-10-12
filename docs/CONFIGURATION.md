@@ -463,8 +463,8 @@ No pending follower promises or per-queue timers need cancellation.
 
 This is **not** a CLI signal/cancellation protocol. SIGINT/SIGTERM, crashes and
 power loss can leave partial files (including temporary files), without a final
-report or a promise to drain. No rollback, resume, target restart or
-rate-limit handling is added. The trusted-parent, exclusive-directory and
+report or a promise to drain. No rollback, resume or target restart is added.
+The trusted-parent, exclusive-directory and
 per-file no-overwrite guarantees stay unchanged. A concurrent set is not atomic,
 not necessarily observed at one instant, and not guaranteed jointly canonical.
 
@@ -502,15 +502,27 @@ existing `USAGE` code, without echoing inputs. Omitted options and explicit zero
 without D preserve all older traces/budgets/errors. Config schema stays v1;
 snapshot v1/v2/v4 and closed batch report v1/v2 have no new fields.
 
-Only transport/attempt-timeout and HTTP 502/503/504 failures are eligible for
-up to N retries of that logical read. Wait 100/200/400 ms before retries 1/2/3;
-there is no jitter, Retry-After handling or 429 retry. Every other HTTP status,
+Only transport/attempt-timeout and HTTP 502/503/504/429 failures are eligible for
+up to N retries of that logical read. Wait 100/200/400 ms before retries 1/2/3,
+except an accepted 429 Retry-After minimum (at most 30000 ms). There is no jitter
+or provider-wide queue. Every other HTTP status,
 redirect, HTTP parser/header/encoding/body-size/envelope failure, JSON-RPC error,
 null/malformed result, identity/canonical check and local filesystem error is
 permanent. Same method/params and new ID per attempt preserve hash/height/genesis
 decisions; never restart a target or group resolver. Exhaustion returns the last
 safe original RPC code, except that an exhausted D takes priority as fixed
 `CAPTURE_DEADLINE`. See the [full policy](PROTOCOL.md#transient-retries-and-active-capture-deadline).
+
+429 accepts one bounded integer-seconds or HTTP-date field, including all three
+standard date formats. A valid delay over 30000 ms, or reaching/exceeding the
+remaining capture deadline, fails immediately as `RPC_HTTP` without retrying
+early. Duplicate, over-128-character and unparseable comma-bearing fields also
+refuse. Missing/invalid non-comma values use the existing bounded backoff.
+Default/zero never waits on 429. Date conversion uses the wall clock once;
+minimum waits/deadlines use monotonic time and recheck after early wakes.
+Internal wait aborts yield `RETRY_CANCELLED`, remove wait resources and prevent
+further attempts; no CLI signal lifecycle is added. See the
+[exact parser and wait contract](PROTOCOL.md#http-429-and-retry-after).
 
 Let M be selected targets (1–32), G expected-chain groups, g=1 with genesis else
 0, s=1 for hash/positive depth else 0, C eligible implementation-code reads and
@@ -524,12 +536,22 @@ and W(R)=100*(2^R−1) ms, or 0/100/300/700 ms. Define ordinary logical reads O:
 | Shared batch | `G*(2+g+s)+M*(9+2*g)+C` | B≤M |
 
 Maximum wire attempts are `(R+1)*(O+B)`. Their maximum scheduled timeout-plus-
-backoff sum, before clipping to remaining deadlines, is
+backoff sum **without accepted 429 minimums**, before clipping to remaining deadlines, is
 `(R+1)*(O*T+B*min(T,5000))+(O+B)*W(R)` milliseconds. These are upper bounds:
 each read stops retrying immediately after success, and permanent failures
 truncate the sequence. A failed read adds only its actual attempts; unreached
 reads add zero. Bad env and unavailable-group followers consume zero requests.
 File failures occur after capture and add no RPC or retry.
+
+With accepted 429 minimums, replace W(R) by `R*30000` ms for a conservative
+mixed-failure upper bound: `(R+1)*(O*T+B*min(T,5000))+(O+B)*R*30000`.
+Each retry slot contributes at most 30000 ms; it uses either that bounded
+server minimum or the existing backoff, not both. Zero/past-date minimums add
+zero delay. Refused minimums and exhausted retry capacity add no waits/attempts.
+The fixed capture deadline still bounds all request and wait work together;
+the 429 policy never grants extra attempts, resets D or changes T/beacon limits.
+Wait allowances describe monotonic targets, not the sum of timer durations
+after early wakes; timer rounding and scheduling can overrun a nominal target.
 
 For one capture with its applicable O/B, the scheduled RPC/delay allowance is
 bounded by the smaller of D and the formula above. A shared leader includes
