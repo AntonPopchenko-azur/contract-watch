@@ -113,8 +113,9 @@ export function configuredEndpoint(name, environment = process.env) {
   return endpoint;
 }
 
-export async function configuredCapture(path, name, options, environment = process.env) {
+export async function configuredCapture(path, name, options, environment = process.env, check = () => {}) {
   const config = await readConfig(path); // Validate all entries, not just the selected one.
   const prepared = prepareConfiguredCapture(config, name, options);
+  check();
   return { ...prepared.capture, rpcUrl: configuredEndpoint(prepared.rpcEnv, environment) };
 }

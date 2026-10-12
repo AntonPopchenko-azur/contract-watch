@@ -23,6 +23,8 @@ const messages = {
   DEADLINE_OPTION: 'Capture deadline must be a canonical decimal integer from 100 to 600000 milliseconds.',
   RETRIES_DEADLINE: 'Positive retries require an explicit capture deadline.',
   CAPTURE_DEADLINE: 'Capture exceeded its overall time limit.',
+  CAPTURE_CANCELLED: 'Capture cancelled; owned output was removed.',
+  CANCEL_CLEANUP: 'Capture cancelled; output cleanup was incomplete. Inspect the destination before reuse.',
   RETRY_CANCELLED: 'RPC retry wait was cancelled.',
   RPC_TIMEOUT: 'RPC request exceeded its time limit.',
   RPC_NETWORK: 'RPC connection failed.',

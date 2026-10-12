@@ -219,9 +219,9 @@ writes remove their temporary files. The batch directory is retained even if
 all targets fail. A retry requires an explicitly new directory; there is no
 resume, merging or cleanup of earlier results.
 
-The set is **not an atomic transaction**. Interruptions/crashes can leave a
-partial directory and no final report; a crash may leave a writer temporary
-file. The CLI has no batch cancellation/rollback protocol. Directory durability
+The set is **not an atomic transaction**. Crashes/unhandled interruptions can
+leave a partial directory, temporary files and no report. Handled SIGINT/SIGTERM
+before completion uses [owned-output rollback](CANCELLATION.md). Directory durability
 across power loss and protection from hostile concurrent replacement of parent
 or output directory paths are not guaranteed. Normal per-file atomicity and
 no-overwrite guarantees do not make the whole set atomic.
@@ -322,8 +322,9 @@ After successful resolution, a member's env, RPC, anchor verification, genesis,
 state, final check or save failure is local to that member. The anchor stays
 `resolved`, even if the leader fails or no member saves a file. The next member
 uses the original anchor; it may independently pass or fail its own checks.
-Earlier successful files remain. No anchor replacement, fallback,
-CLI cancellation protocol, resume or set rollback are added. Concurrency is
+Earlier successful files remain after ordinary target failures. No anchor
+replacement, fallback or resume is added. Handled interrupts instead follow
+the [cancellation contract](CANCELLATION.md). Concurrency is
 separately opt-in through `--concurrency`.
 
 ### Batch report v2
@@ -461,9 +462,11 @@ stop new dispatch and drain already-started work before a safe `INTERNAL` error;
 there is no final batch report in that exceptional path, and saved files remain.
 No pending follower promises or per-queue timers need cancellation.
 
-This is **not** a CLI signal/cancellation protocol. SIGINT/SIGTERM, crashes and
-power loss can leave partial files (including temporary files), without a final
-report or a promise to drain. No rollback, resume or target restart is added.
+Handled SIGINT/SIGTERM stops this queue and aborts all active transports/waits.
+After started jobs drain, owned files are rolled back before completion, with
+empty stdout and exit 130/143. See [cancellation](CANCELLATION.md) for ownership
+checks and cleanup-failure reporting. Crashes, SIGKILL and power loss can still
+leave partial/temporary files without a final report. No resume or restart is added.
 The trusted-parent, exclusive-directory and
 per-file no-overwrite guarantees stay unchanged. A concurrent set is not atomic,
 not necessarily observed at one instant, and not guaranteed jointly canonical.
@@ -576,6 +579,7 @@ receive `SHARED_BLOCK_UNAVAILABLE` with no env access. A later leader deadline
 leaves the resolved anchor usable by followers. Other groups/targets continue;
 successful files, ordinal names and input report/group order remain. No raw
 endpoint/status/provider error, retry metadata or extra timing field is saved.
-This does not add a CLI signal/drain protocol, rollback or resumption. Re-running
-a batch still requires a new output directory; completed files can be inspected,
+The [live cancellation lifecycle](CANCELLATION.md) overrides per-target failure
+continuation when an interrupt is handled before completion. Re-running a batch
+still requires a new output directory; completed files can be inspected,
 compared and migrated offline under the existing contracts.

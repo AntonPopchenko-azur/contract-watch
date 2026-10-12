@@ -22,7 +22,8 @@ Item 21 adds opt-in shared blocks per expected-chain group on 2026-10-07.
 Item 22 adds bounded concurrent batch admission on 2026-10-10.
 Item 23 adds opt-in transient retries and active capture deadlines on 2026-10-11.
 Item 24 adds bounded opt-in HTTP 429 waits and testable wait cancellation on 2026-10-12.
-Items 25–45 have not started.
+Item 25 adds explicit live interruption, drain and owned-output rollback on 2026-10-12.
+Items 26–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -207,10 +208,23 @@ There is no worker-owned scheduler or automatic endless backlog.
   files and offline reuse. Full test/check suites and demo pass. No provider-wide
   queue, new config, rollback or item-25 lifecycle. Completed 2026-10-12.
 
+- [x] **25 — Explicit cancellation.** Add one live SIGINT/SIGTERM lifecycle:
+  first signal wins (130/143), abort active HTTP and retry/Retry-After waits,
+  stop queued env/RPC admission and drain every started capture/writer. Before
+  the documented completion point, remove only this run's owned files and
+  empty batch directory, including earlier saved members. Verify parent and
+  inode/metadata identity, preserve substituted/modified/user-added files and
+  report incomplete cleanup safely without partial stdout. Preserve ordinary
+  per-target failure outcomes, successful files, all pins/budgets and strict
+  snapshot/report formats. Deterministic and real child-signal tests cover
+  request/wait/file boundaries, shared leaders/followers, concurrency 1/2/8,
+  repeated signals, deadline races, cleanup failures, completion and offline
+  reuse. All 1340 tests, check, demo and changed-JS syntax checks pass. Document
+  trusted-directory, crash/SIGKILL, visibility and hung-I/O limits in
+  CANCELLATION.md. No history/watch/config/provider queue. Completed 2026-10-12.
+
 ## Planned increments
 
-- [ ] **25 — Explicit cancellation.** Handle user interrupts with prompt request
-  cancellation and no partially published snapshot set.
 - [ ] **26 — Local history directory.** Store indexed observations under explicit
   target directories with collision and interrupted-write recovery tests.
 - [ ] **27 — History timeline view.** Present recorded slot/code transitions

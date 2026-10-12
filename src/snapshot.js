@@ -230,8 +230,13 @@ export async function readSnapshot(path) {
   return validateSnapshot(parsed);
 }
 
-export async function saveSnapshot(path, snapshot) {
+export async function saveSnapshot(path, snapshot, outputs) {
   validateSnapshot(snapshot);
+  if (outputs) {
+    const serialized = `${JSON.stringify(snapshot, null, 2)}\n`;
+    if (Buffer.byteLength(serialized) > fileLimit(snapshot.schemaVersion)) fail('FILE_WRITE');
+    return outputs.save(path, serialized);
+  }
   const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`);
   let file;
   let created = false;

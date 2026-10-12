@@ -12,7 +12,7 @@ export function createCapturePolicy(options = {}, runtime = {}) {
   const { retries, deadlineMs } = retryOptions(options);
   const now = runtime.now ?? (() => performance.now());
   const wallNow = runtime.wallNow ?? (() => Date.now());
-  // Internal wait cancellation seam; no CLI signal lifecycle is installed.
+  // Shared signal covers transport, retry waits and all reads in this capture.
   const signal = runtime.signal;
   const wait = runtime.sleep ?? ((ms, signal) => sleep(ms, undefined, { signal }));
   const end = deadlineMs === undefined ? Infinity : now() + deadlineMs;
@@ -35,6 +35,7 @@ export function createCapturePolicy(options = {}, runtime = {}) {
   };
   return {
     check,
+    signal,
     retryEnabled: retries > 0,
     rateLimit(rawHeaders) {
       if (retries === 0) return false;
@@ -78,6 +79,6 @@ export function capturePolicy(options) {
   return options[CAPTURE_POLICY] ?? createCapturePolicy(options);
 }
 
-export function startCapture(options) {
-  return { ...options, [CAPTURE_POLICY]: createCapturePolicy(options) };
+export function startCapture(options, runtime = {}) {
+  return { ...options, [CAPTURE_POLICY]: createCapturePolicy(options, runtime) };
 }

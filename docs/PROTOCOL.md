@@ -109,7 +109,8 @@ allows other groups and newly eligible followers to proceed without polling.
 Failed resolution cancels followers' pending attempts without env/RPC. Started
 targets are drained before reporting. Ordinary failures continue other work;
 unexpected scheduler exceptions stop queued dispatch and drain started jobs.
-Full CLI interrupt handling remains a later feature.
+Handled SIGINT/SIGTERM instead stops admission, aborts and drains active work,
+then rolls back owned output; see [cancellation](CANCELLATION.md).
 
 RPC promises settle after the HTTP request closes. On a timeout or rejected/
 aborted/malformed response, the client destroys the failed request, clears its
@@ -180,9 +181,9 @@ safe RPC error; there is no raw provider status/message in reports.
 These are scheduled capture limits, not hard real-time guarantees: event-loop
 delays and transport-close cleanup can finish after the nominal deadline.
 Config, filesystem persistence and whole-batch/process lifetime are outside it.
-Once handed to persistence, a complete validated snapshot uses the same writer;
-no file-operation retries, rollback, signal handling or atomic-set claim is
-added. Failure before resolver completion makes that group unavailable; after
+Persistence retains atomic no-overwrite publication without file-operation
+retries. The live [cancellation lifecycle](CANCELLATION.md) also covers file
+work, outside the capture deadline; it does not promise crash-atomic sets. Failure before resolver completion makes that group unavailable; after
 resolution it affects only that target, retaining the anchor and saved files.
 Reports and saved snapshot schemas are unchanged. Exact formulas and failure
 prefixes are in [retry budgets](CONFIGURATION.md#retry-and-capture-deadline-budgets).
@@ -244,9 +245,10 @@ Node's cancellable promise timer. Aborting a pending retry wait removes its
 timer/listener, yields fixed `RETRY_CANCELLED`, and prevents later attempts.
 Abort reasons are never exposed. A simultaneous expired deadline takes priority.
 Tests drive cancellation, early wakes and deadline exhaustion without real
-delay timers, and separately check real loopback transport closure. This is an
-internal wait interface, not CLI signal handling, prompt in-flight capture
-cancellation, rollback or a batch drain protocol; those remain item 25.
+delay timers, and separately check real loopback transport closure. Live CLI
+commands now pass their shared signal to this wait interface and every RPC.
+Their [cancellation lifecycle](CANCELLATION.md) takes precedence in the CLI
+outcome, including a simultaneous deadline or provider failure.
 Every wait remains in its admitted target worker, including shared resolver
 waits. Resolved anchors and already published files retain the old failure rules.
 

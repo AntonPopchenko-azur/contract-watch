@@ -375,10 +375,11 @@ never uses diff's exit 2. Check stdout and status before parsing.
 The set is **not atomic**: successful files remain after later failures, failed
 ordinals leave gaps, and later targets continue. Even an all-failure run keeps
 its empty directory. Individual files retain private atomic no-overwrite writes;
-a repeat needs another explicit new directory. A crash/interruption can leave
-partial results without a final report. Each saved file remains ordinary
+a repeat needs another explicit new directory. A crash or unhandled interruption
+can leave partial results without a final report. Handled SIGINT/SIGTERM uses the
+[cancellation lifecycle](#cancel-a-live-capture) below. Each saved file remains ordinary
 snapshot v1/v2/v4, usable with the existing offline inspect/diff/migrate commands.
-The single `snapshot` command remains unchanged. See [batch guarantees and limits](docs/CONFIGURATION.md#sequential-one-shot-batch-capture).
+Single capture uses the same cancellation lifecycle. See [batch guarantees and limits](docs/CONFIGURATION.md#sequential-one-shot-batch-capture).
 
 ## Share one block per chain in a batch
 
@@ -406,7 +407,8 @@ leader's initial observed genesis. No known/public genesis is substituted.
 Leader env/resolution failure marks its group unavailable. Later members get
 `SHARED_BLOCK_UNAVAILABLE` without env/RPC access; other groups continue. After
 an anchor is resolved, any target's env/capture/save failure leaves it unchanged.
-There is no re-resolution, alternate source, fallback or rollback.
+There is no re-resolution, alternate source or fallback. Ordinary target failures
+do not roll back successful files.
 Successful files remain ordinary snapshots and survive subsequent failures.
 
 This flag emits **batch report v2** with `mode: "shared-block"` and ordered
@@ -460,9 +462,9 @@ a hard wall-clock limit. Memory and temporary files scale with at most N active
 targets. Timeout and transport/body errors close the affected request before
 a retry starts or that capture releases its worker. Retry delays retain the worker.
 
-Successful files survive later failures. No SIGINT/SIGTERM cancellation/drain or
-rollback workflow is added: interruption can still leave partial files and no
-final report. See the [concurrency contract](docs/CONFIGURATION.md#bounded-concurrency)
+Successful files survive ordinary target failures. A handled SIGINT/SIGTERM stops
+admission, cancels active work, drains writers and rolls back this run before
+the completion point, as described [below](#cancel-a-live-capture). See the [concurrency contract](docs/CONFIGURATION.md#bounded-concurrency)
 for queue ordering, internal-error drain behavior and resource limits.
 
 ## Retry transient reads within a capture deadline
@@ -516,8 +518,8 @@ worker, preserving the batch-wide concurrency cap. An HTTP-date uses the local
 wall clock once at receipt to calculate a monotonic minimum; later wall-clock
 changes do not move it. Early timer wakes re-wait the remainder. Correct UTC on
 the local machine matters for date interpretation. Internal waits support abort
-signals and fixed `RETRY_CANCELLED` errors, tested with fake time; CLI
-SIGINT/SIGTERM and full capture cancellation remain a separate roadmap item.
+signals and fixed `RETRY_CANCELLED` errors, tested with fake time. Live commands
+connect these waits to their shared SIGINT/SIGTERM cancellation signal.
 
 The counts below describe logical reads with retries disabled. With N retries,
 maximum attempts are **(1+N) × logical reads**. Without accepted 429 minimums,
@@ -527,8 +529,33 @@ the capture deadline. The deadline can stop that sequence sooner.
 See [exact request/time budgets](docs/CONFIGURATION.md#retry-and-capture-deadline-budgets).
 This is a capture budget, excluding config/output/file work, not a hard process
 or whole-batch wall-clock guarantee: event-loop and transport cleanup can run
-late. It adds no rollback or signal workflow. Successful files and resolved
-anchors survive later failures; snapshot v1/v2/v4 and batch v1/v2 remain unchanged.
+late. Successful files and resolved anchors survive ordinary target failures; snapshot v1/v2/v4 and batch v1/v2 remain unchanged.
+
+## Cancel a live capture
+
+For `snapshot` and `snapshot-many`, **SIGINT** (Ctrl-C) exits **130** and
+**SIGTERM** exits **143** when handled before completion. The first signal wins;
+repeated signals let cleanup finish. Stdout stays empty and stderr contains one
+fixed `CAPTURE_CANCELLED` error. Active HTTP requests and retry/Retry-After waits
+are cancelled promptly, queued targets never read their environment or start
+RPC, and all started jobs/writers drain before output cleanup.
+
+Before the commit point, cancellation removes this run's owned snapshots and
+temporary files, including earlier successful batch members, then removes its
+new directory if empty. The commit point is after all work/handle cleanup and
+the final signal check, immediately before the complete result is submitted to
+stdout, with no asynchronous gap. Files remain after that point. Ordinary
+per-target env/RPC/write errors retain earlier files and the usual batch report.
+
+Cleanup checks parent/file identity and file metadata. It never recursively
+removes directories or deletes unrecognized, replaced or user-added files.
+If cleanup fails or ownership cannot be verified, stderr uses `CANCEL_CLEANUP`
+with the same signal exit status: inspect the destination manually; leftovers
+may remain. Use local directories you control. SIGKILL, crashes, power loss,
+blocked event loops and hung filesystem I/O cannot provide prompt rollback;
+files may also be visible while a batch is still running. See the
+[full cancellation contract](docs/CANCELLATION.md), including filesystem races,
+startup/after-completion signals and error precedence.
 
 ## Observe a beacon implementation
 

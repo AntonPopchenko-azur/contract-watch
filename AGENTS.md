@@ -95,8 +95,7 @@ GitHub release page. Never replace an existing published tag.
   and values over 128 characters. Missing/invalid non-comma values use the old
   backoff. Default/zero still yields RPC_HTTP with no waits. Convert dates once
   with an injectable wall clock; use monotonic minimum/deadline rechecks after
-  early wakes and cancellable internal sleeps. Do not install CLI signals or a
-  provider-wide scheduler. Never retry
+  early wakes and cancellable internal sleeps. Do not add a provider-wide scheduler. Never retry
   protocol/result/identity/canonical errors or file operations, restart captures,
   or replace pins. One monotonic active-capture budget includes resolver for
   shared leaders; followers start their own budget at admission, excluding queue
@@ -104,8 +103,15 @@ GitHub release page. Never replace an existing published tag.
   before returning/persistence and use fixed CAPTURE_DEADLINE on exhaustion.
   Retry delays retain workers. Defaults/explicit zero without deadline preserve
   traces/errors/budgets; snapshot/report/config schemas are unchanged. Deadline
-  excludes file work and is not a hard process/batch wall limit. No CLI interrupt
-  workflow or rollback. Missing env,
+  excludes file work and is not a hard process/batch wall limit. Live commands
+  install one SIGINT/SIGTERM lifecycle: first signal wins (130/143), abort all
+  active HTTP/waits, stop queued admission before env/RPC, drain started work,
+  and roll back owned outputs before the commit point. Preserve no-overwrite
+  writes and inode/metadata/parent checks; never recursively delete a directory
+  or remove substituted/user-added files. Empty stdout and fixed safe stderr
+  on cancellation; failed cleanup is CANCEL_CLEANUP, still exit 130/143. Follow
+  docs/CANCELLATION.md for the exact completion point, trusted-directory limits,
+  cleanup failures and SIGKILL/crash/I/O limits. Missing env,
   RPC and write failures are per-target safe JSON outcomes; preserve successes,
   ordinal filenames and old snapshot formats. Batch exit 0 only for all saved,
   otherwise 1. Global errors precede RPC and have empty stdout. Follow the batch

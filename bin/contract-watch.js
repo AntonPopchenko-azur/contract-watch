@@ -6,6 +6,7 @@ import { fail, publicError } from '../src/errors.js';
 import { migrateFile } from '../src/migration.js';
 import { configuredCapture, MAX_CONFIG_TARGETS } from '../src/config.js';
 import { captureMany } from '../src/batch.js';
+import { runLive } from '../src/cancellation.js';
 import { startCapture, capturePolicy } from '../src/capture-policy.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
@@ -58,7 +59,10 @@ Retries cover transport/timeouts, HTTP 502/503/504 and HTTP 429.
 429 honors Retry-After seconds/HTTP-date up to 30s; excessive waits fail without retry.
 Missing/invalid non-comma headers use 100/200/400 ms; ambiguous/oversized fields fail.
 Default/zero retries still fail immediately on 429. No provider-wide queue.
-No rollback or CLI interrupt/drain guarantee. Partial files survive failures.
+SIGINT/SIGTERM before completion cancels and drains work, then removes owned output.
+Cancellation: empty stdout, safe stderr, exit 130/143; first signal wins.
+Cleanup failure preserves uncertain files and reports CANCEL_CLEANUP.
+Use trusted directories; SIGKILL/crashes/hung filesystem I/O have no rollback guarantee.
 Shared mode resolves from each group's first selection, then every RPC checks that anchor.
 An unavailable anchor blocks its group without fallback; other groups continue.
 Genesis checks each target against the group's observation. No simultaneous-set guarantee.
@@ -182,32 +186,33 @@ async function main(args) {
   }
   if (args[0] === 'snapshot') {
     const options = parseSnapshot(args.slice(1));
-    const selectedOptions = captureFlags(options);
-    const captureOptions = startCapture(options['--config']
-      ? await configuredCapture(options['--config'], options['--target'], selectedOptions)
-      : { ...selectedOptions, rpcUrl: options['--rpc'] ?? process.env.CONTRACT_WATCH_RPC_URL,
-        address: options['--address'], chainId: options['--chain-id'] });
-    const { snapshot, beaconResolution } = options['--implementation-code']
-      ? { snapshot: await captureWithImplementation(captureOptions) }
-      : options['--resolve-beacon']
-        ? await captureWithBeacon(captureOptions) : { snapshot: await capture(captureOptions) };
-    const report = snapshotReport(snapshot, { beaconResolution });
-    capturePolicy(captureOptions).check();
-    await saveSnapshot(options['--out'], snapshot);
-    process.stdout.write(`${report}\nSnapshot saved.\n`);
-    return;
+    return runLive(async operation => {
+      const selectedOptions = captureFlags(options);
+      const captureOptions = startCapture(options['--config']
+        ? await configuredCapture(options['--config'], options['--target'], selectedOptions, process.env, operation.check)
+        : { ...selectedOptions, rpcUrl: options['--rpc'] ?? process.env.CONTRACT_WATCH_RPC_URL,
+          address: options['--address'], chainId: options['--chain-id'] }, { signal: operation.signal });
+      const { snapshot, beaconResolution } = options['--implementation-code']
+        ? { snapshot: await captureWithImplementation(captureOptions) }
+        : options['--resolve-beacon']
+          ? await captureWithBeacon(captureOptions) : { snapshot: await capture(captureOptions) };
+      const report = snapshotReport(snapshot, { beaconResolution });
+      capturePolicy(captureOptions).check();
+      await saveSnapshot(options['--out'], snapshot, operation.outputs);
+      return { stdout: `${report}\nSnapshot saved.\n` };
+    });
   }
   if (args[0] === 'snapshot-many') {
     const options = parseSnapshot(args.slice(1), true);
-    const report = await captureMany({ configPath: options['--config'], names: options['--target'],
-      concurrency: concurrency(options['--concurrency']),
-      outputDir: options['--out-dir'], options: captureFlags(options),
-      includeBeacon: options['--resolve-beacon'] ?? false,
-      includeImplementation: options['--implementation-code'] ?? false,
-      sharedBlock: options['--shared-block'] ?? false });
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    if (report.failed) process.exitCode = 1;
-    return;
+    return runLive(async operation => {
+      const report = await captureMany({ configPath: options['--config'], names: options['--target'],
+        concurrency: concurrency(options['--concurrency']),
+        outputDir: options['--out-dir'], options: captureFlags(options),
+        includeBeacon: options['--resolve-beacon'] ?? false,
+        includeImplementation: options['--implementation-code'] ?? false,
+        sharedBlock: options['--shared-block'] ?? false }, process.env, operation);
+      return { stdout: `${JSON.stringify(report, null, 2)}\n`, exitCode: report.failed ? 1 : 0 };
+    });
   }
   if (args[0] === 'diff') {
     const { json, exitCode, files } = parseDiff(args.slice(1));

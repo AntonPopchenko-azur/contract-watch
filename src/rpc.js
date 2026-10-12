@@ -32,7 +32,14 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
       let request;
       let timer;
       let outcome;
-      const publish = () => outcome?.error ? reject(outcome.error) : resolve(outcome?.result);
+      const onAbort = () => {
+        stop('CAPTURE_CANCELLED', false);
+        request?.destroy();
+      };
+      const publish = () => {
+        policy.signal?.removeEventListener('abort', onAbort);
+        return outcome?.error ? reject(outcome.error) : resolve(outcome?.result);
+      };
       const finish = (error, result) => {
         if (settled) return;
         settled = true;
@@ -48,6 +55,8 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
         if (retryable) transient.set(error, retryable);
         finish(error);
       };
+      if (policy.signal?.aborted) { stop('CAPTURE_CANCELLED', false); return; }
+      policy.signal?.addEventListener('abort', onAbort, { once: true });
       timer = setTimeout(() => stop(deadlineLimited ? 'CAPTURE_DEADLINE' : 'RPC_TIMEOUT'), Math.ceil(requestTimeout));
       try {
         request = (url.protocol === 'https:' ? https : http).request(url, {
