@@ -1,9 +1,10 @@
 # Live capture cancellation
 
 Implemented 2026-10-12 for `snapshot` and `snapshot-many`. There are no new
-flags, config fields, snapshot/report versions, watch loop, history directory,
-provider-wide queue or resume mechanism. Offline inspect, diff and migrate keep
-their existing behavior and do not install these signal handlers.
+flags, config fields, snapshot/report versions, watch loop or provider-wide
+queue in this lifecycle. Offline inspect, diff, migrate and the separate
+[history commands](HISTORY.md) do not install these signal handlers. History
+uses explicit interrupted-publication recovery, not live-output rollback.
 
 ## Lifetime and completion point
 

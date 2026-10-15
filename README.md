@@ -740,6 +740,57 @@ with itself. Keep legacy files for comparisons under their legacy chain-ID-only
 contract, or make new explicit genesis captures. No override or automatic RPC
 backfill is provided. See [migration and backup guarantees](docs/MIGRATION.md).
 
+## Keep an explicit local history
+
+History stores existing snapshots offline in one directory per exact target,
+chain ID, source, snapshot version and genesis identity. Initialize a **new**
+directory, then add each selected observation explicitly:
+
+```sh
+mkdir -p snapshots/history
+node bin/contract-watch.js history init examples/before.json --dir snapshots/history/demo-v1
+node bin/contract-watch.js history add examples/before.json --dir snapshots/history/demo-v1
+node bin/contract-watch.js history add examples/after.json --dir snapshots/history/demo-v1
+node bin/contract-watch.js history verify --dir snapshots/history/demo-v1
+```
+
+These examples are synthetic; use saved capture files for real observations.
+Init binds identity and creates an empty index. Each add preserves the source
+and copies its exact bytes/timestamp to a generated snapshot filename. Repeating
+an identical logical snapshot is idempotent, including different JSON whitespace
+or key order; another capture timestamp makes a separate observation. Versions
+v1–v4 are supported in separate compatible histories. Missing genesis stays
+missing and never matches an observed hash. Returned generated snapshot names
+can be passed to the existing offline inspect/diff/migrate commands.
+
+The index consists of an immutable header and up to **128** immutable numbered
+entries, each at most **4 KiB**. Each entry binds its snapshot's bytes, identity,
+metadata and the previous entry. The reader accepts at most **512** directory
+entries; snapshots retain their 512/768 KiB limits. All indexed and pending
+snapshots are strictly validated. No target discovery, recursive import, config,
+network, timeline, pruning or watch loop is enabled.
+
+A snapshot is published before its index entry. Until that entry exists it is
+**pending**, not committed. After an interrupted add, inspect the counts with
+verify and explicitly recover the selected source:
+
+```sh
+node bin/contract-watch.js history recover snapshots/selected.json --dir snapshots/history/demo-v1
+```
+
+Use the same compatible source selected for the interrupted operation.
+Recovery never overwrites files, imports other pending observations or removes
+abandoned stages. If no snapshot was published, repeat add instead. Competing
+writers cannot overwrite an ordinal; a conflict requires an explicit retry.
+Verify emits safe JSON counts and exits 1 for pending snapshots, otherwise 0;
+errors have empty stdout and fixed safe stderr. All history operations are
+offline, and live capture/cancellation remains unchanged.
+
+Use trusted local directories and retain source files/backups. SIGKILL/crashes
+can leave stages or a committed entry without stdout; power-loss durability and
+hostile concurrent directory replacement are not guaranteed. See the
+[history schema, recovery matrix and limits](docs/HISTORY.md) before automating.
+
 ## Record genesis identity
 
 Add the valueless `--genesis` flag to save **snapshot v4** with the RPC's observed

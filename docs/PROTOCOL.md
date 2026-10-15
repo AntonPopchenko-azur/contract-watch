@@ -743,6 +743,17 @@ not-recorded warning. Saved implementation availability remains separate.
 See [migration pairs and backup guarantees](MIGRATION.md) and the independent
 [synthetic v4 fixtures](../test/fixtures/genesis/), generated on 2026-10-05.
 
+## Offline local history
+
+The separate [history v1 contract](HISTORY.md) indexes explicitly selected saved
+snapshots without RPC, environment/config lookup, migration or changes to live
+capture. It preserves strict snapshot v1–v4, source bytes and capturedAt, binds
+exact target/chain/source/version/genesis identity and never invents genesis.
+Immutable index entries commit only after their snapshots are published; pending
+data, concurrent ordinal conflicts, bounded validation and explicit recovery are
+defined there. Existing inspect/diff/migrate formats and live interrupt behavior
+remain unchanged. No history timeline or reorg interpretation is performed.
+
 ## Offline inspection
 
 `contract-watch inspect FILE` passes one file through the existing bounded

@@ -3,6 +3,7 @@ import { capture, captureWithBeacon, captureWithImplementation, readSnapshot, sa
 import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
 import { timeout, concurrency, retries, deadline, retryOptions } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
+import { historyOperation } from '../src/history.js';
 import { migrateFile } from '../src/migration.js';
 import { configuredCapture, MAX_CONFIG_TARGETS } from '../src/config.js';
 import { captureMany } from '../src/batch.js';
@@ -15,10 +16,26 @@ Usage:
   contract-watch snapshot --address ADDRESS --chain-id ID --out FILE [options]
   contract-watch snapshot --config FILE --target NAME --out FILE [options]
   contract-watch snapshot-many --config FILE --target NAME [--target NAME ...] --out-dir NEW [options]
+  contract-watch history init SOURCE.json --dir NEW
+  contract-watch history add SOURCE.json --dir TARGET_DIR
+  contract-watch history verify --dir TARGET_DIR
+  contract-watch history recover SOURCE.json --dir TARGET_DIR
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
   contract-watch migrate SOURCE.json --to-version 4 --out NEW.json
+
+History commands (offline):
+  init               Create a new private target directory; bind identity from SOURCE
+  add                Copy one validated snapshot and append an immutable index entry
+  verify             Validate all indexed/pending snapshots; no writes or network
+  recover            Confirm only SOURCE's pending snapshot, or interrupted empty init
+History keeps source bytes/timestamps; identical observations are idempotent.
+One target/chain/source/snapshot-version/genesis identity per directory.
+128 indexed observations, 512 directory entries; index files at most 4 KiB each.
+Snapshot publishes before its index entry; only indexed observations are committed.
+Concurrent writers never overwrite; on conflict verify and retry explicitly.
+No automatic import, timeline, pruning or live capture changes. See docs/HISTORY.md.
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -172,12 +189,37 @@ function parseMigration(args) {
   return { input, output: options['--out'], toVersion: options['--to-version'] };
 }
 
+function parseHistory(args) {
+  const [operation, ...rest] = args;
+  if (!['init', 'add', 'verify', 'recover'].includes(operation)) fail('USAGE');
+  let input, directory;
+  for (let index = 0; index < rest.length; index++) {
+    const token = rest[index];
+    if (token === '--dir') {
+      if (directory !== undefined) fail('USAGE');
+      directory = rest[++index];
+      if (!directory || directory.startsWith('-')) fail('USAGE');
+    } else {
+      if (!token || token.startsWith('-') || input !== undefined) fail('USAGE');
+      input = token;
+    }
+  }
+  if (!directory || (operation === 'verify' ? input !== undefined : !input)) fail('USAGE');
+  return { operation, input, directory };
+}
+
 async function main(args) {
   if (args.length === 0 || (args.length === 1 && ['--help', '-h'].includes(args[0]))) {
     process.stdout.write(HELP); return;
   }
   if (args.length === 1 && args[0] === '--version') {
     process.stdout.write('0.1.0\n'); return;
+  }
+  if (args[0] === 'history') {
+    const result = await historyOperation(parseHistory(args.slice(1)));
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (result.status === 'pending') process.exitCode = 1;
+    return;
   }
   if (args[0] === 'migrate') {
     const migrated = await migrateFile(parseMigration(args.slice(1)));

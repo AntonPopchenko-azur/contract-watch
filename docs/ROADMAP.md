@@ -23,7 +23,8 @@ Item 22 adds bounded concurrent batch admission on 2026-10-10.
 Item 23 adds opt-in transient retries and active capture deadlines on 2026-10-11.
 Item 24 adds bounded opt-in HTTP 429 waits and testable wait cancellation on 2026-10-12.
 Item 25 adds explicit live interruption, drain and owned-output rollback on 2026-10-12.
-Items 26–45 have not started.
+Item 26 adds explicit offline history, immutable indexing and interrupted-write recovery on 2026-10-15.
+Items 27–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -223,10 +224,27 @@ There is no worker-owned scheduler or automatic endless backlog.
   trusted-directory, crash/SIGKILL, visibility and hung-I/O limits in
   CANCELLATION.md. No history/watch/config/provider queue. Completed 2026-10-12.
 
+- [x] **26 — Local history directory.** Add explicit offline history
+  init/add/verify/recover commands for one selected source and target directory.
+  Preserve strict v1–v4 source bytes/timestamps and bind exact target, chain,
+  source, version and observed/unknown genesis identity. Use an immutable header
+  and up to 128 contiguous, hash-linked index records: publish each complete
+  snapshot first, then its no-overwrite entry as the commit point. Bound actual
+  reads, index bytes, nesting and directory entries; validate committed/pending
+  snapshots and index integrity without treating partial publication as success.
+  Same logical observations are idempotent; competing writers cannot overwrite
+  ordinals. Explicit recovery confirms only the selected pending observation
+  or interrupted initialization, preserving earlier files and abandoned stages.
+  File/CLI tests cover identities, formats, corruption, limits, collisions,
+  links/special files/substitution, I/O failures, concurrent writers, real
+  SIGINT/SIGTERM/SIGKILL boundaries, offline spies and reuse. All 1442 tests,
+  check, demo and changed-JS syntax checks pass. Document schemas, commit points,
+  trusted-directory and crash/power-loss limits in HISTORY.md; live capture and
+  cancellation remain unchanged. No timeline, pruning, watch or reorg analysis.
+  Completed 2026-10-15.
+
 ## Planned increments
 
-- [ ] **26 — Local history directory.** Store indexed observations under explicit
-  target directories with collision and interrupted-write recovery tests.
 - [ ] **27 — History timeline view.** Present recorded slot/code transitions
   across many files without implying unobserved intermediate events.
 - [ ] **28 — History pruning preview.** Offer a dry-run retention plan and an

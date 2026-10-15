@@ -116,6 +116,21 @@ GitHub release page. Never replace an existing published tag.
   ordinal filenames and old snapshot formats. Batch exit 0 only for all saved,
   otherwise 1. Global errors precede RPC and have empty stdout. Follow the batch
   contract in docs/CONFIGURATION.md; later roadmap features remain separate.
+- History is explicit and offline: history init/add/verify/recover with one
+  caller-selected target directory and source (verify has no source). Follow
+  docs/HISTORY.md. Preserve source bytes/mtime, strict snapshot v1–v4 and exact
+  target/chain/source/version/genesis identity; never infer missing genesis.
+  Keep the header and numbered index records immutable, contiguous and hash
+  linked. Publish a complete private snapshot before its no-overwrite index
+  entry; only the entry commits an observation. Bound actual reads, nesting,
+  index files (4 KiB), indexed count (128) and directory names (512). Verify
+  pending/committed data and detect corruption; accept repeats only after full
+  validation. Concurrent ordinal conflicts require explicit retry. Recovery
+  selects only the stated source, never auto-imports other files, rewrites the
+  index or sweeps abandoned stages. Reject final symlinks/special files and
+  foreign names, verify identity around publication/cleanup and never recursively
+  delete. Preserve ordinary offline signal behavior and live cancellation.
+  No timeline, pruning, watch or reorg analysis in this increment.
 - For each functional change, add meaningful regression/protocol/file tests and
   document user-visible behavior. Run `npm test` and `npm run demo` as appropriate.
   Tests use local fake RPC and temporary directories, without keys or external
