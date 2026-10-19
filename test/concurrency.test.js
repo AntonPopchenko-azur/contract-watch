@@ -90,14 +90,20 @@ test('actual active HTTP requests stay within 1/2/8 for 1/32 targets on the same
 
 test('reverse publication never changes report order and final stdout waits for every started capture/save', async t => {
   const paths = await setup(t); const gates = [deferred(), deferred(), deferred()], reached = [deferred(), deferred(), deferred()];
+  const cleanupReached = deferred(), preload = join(paths.dir, 'cleanup-guard.mjs');
+  await fs.writeFile(preload, `import fs from 'node:fs/promises';import {basename} from 'node:path';import {syncBuiltinESMExports} from 'node:module';
+const unlink=fs.unlink;fs.unlink=async path=>{if(basename(path).startsWith('.target-02.json.')){
+  await new Promise(resolve=>{process.once('message',resolve);process.send('cleanup-blocked');});
+}return unlink(path);};syncBuiltinESMExports();`);
   t.after(() => gates.forEach(g => g.resolve()));
   const fake = await fakeRpc(t, async (r, res, req) => {
     const i = Number(req.url.slice(1)) - 1;
     if (r.id === 8) { reached[i].resolve(); await gates[i].promise; }
     return { result: protocolResult(r) };
   });
-  const child = spawn(process.execPath, [CLI, ...args(paths), '--concurrency', '8'], { cwd: ROOT, env: { ...process.env, ...Object.fromEntries([1,2,3].map(i => [`PRIVATE_RPC_${i}`, `${fake.url}/${i}`])) }, stdio: ['ignore','pipe','pipe'] });
-  t.after(() => child.kill()); let stdout = '', stderr = '';
+  const child = spawn(process.execPath, [CLI, ...args(paths), '--concurrency', '8'], { cwd: ROOT, env: { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`, ...Object.fromEntries([1,2,3].map(i => [`PRIVATE_RPC_${i}`, `${fake.url}/${i}`])) }, stdio: ['ignore','pipe','pipe','ipc'] });
+  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }); let stdout = '', stderr = '';
+  child.on('message', message => { if (message === 'cleanup-blocked') cleanupReached.resolve(); });
   child.stdout.on('data', x => { stdout += x; }); child.stderr.on('data', x => { stderr += x; });
   const done = new Promise((resolve,reject) => { child.on('error',reject); child.on('close',resolve); });
   // Filesystem events are hints; test the actual atomic destination after each.
@@ -111,8 +117,17 @@ test('reverse publication never changes report order and final stdout waits for 
   }
   await Promise.race([Promise.all(reached.map(g => g.promise)), done.then(() => { throw Error('Child ended before barriers'); })]);
   for (const i of [2,1]) { gates[i].resolve(); await published(`target-0${i + 1}.json`); assert.equal(stdout, ''); assert.equal(stderr, ''); }
-  assert.deepEqual(await fs.readdir(paths.outputDir), ['target-02.json','target-03.json']);
-  gates[0].resolve(); report({ code: await done, stdout, stderr }, 3, 0);
+  await Promise.race([cleanupReached.promise, done.then(() => { throw Error('Child ended before cleanup barrier'); })]);
+  // Publication precedes temporary-link cleanup. Only final snapshot names are
+  // complete observations here; hold cleanup open to exercise that boundary.
+  const names = await fs.readdir(paths.outputDir), temporary = names.filter(name => name.startsWith('.'));
+  assert.deepEqual(names.filter(name => !name.startsWith('.')).sort(), ['target-02.json','target-03.json']);
+  assert.ok(temporary.some(name => name.startsWith('.target-02.json.')));
+  for (const name of temporary) assert.match(name, /^\.target-0[23]\.json\.[0-9a-f-]+\.tmp$/);
+  gates[0].resolve(); await published('target-01.json');
+  assert.equal(stdout, ''); assert.equal(stderr, '');
+  child.send('release-cleanup'); report({ code: await done, stdout, stderr }, 3, 0);
+  assert.deepEqual((await fs.readdir(paths.outputDir)).sort(), ['target-01.json','target-02.json','target-03.json']);
   assert.equal(fake.calls.length,24);
 });
 
