@@ -768,7 +768,7 @@ entries, each at most **4 KiB**. Each entry binds its snapshot's bytes, identity
 metadata and the previous entry. The reader accepts at most **512** directory
 entries; snapshots retain their 512/768 KiB limits. All indexed and pending
 snapshots are strictly validated. No target discovery, recursive import, config,
-network, timeline, pruning or watch loop is enabled.
+network, pruning or watch loop is enabled.
 
 A snapshot is published before its index entry. Until that entry exists it is
 **pending**, not committed. After an interrupted add, inspect the counts with
@@ -790,6 +790,41 @@ Use trusted local directories and retain source files/backups. SIGKILL/crashes
 can leave stages or a committed entry without stdout; power-loss durability and
 hostile concurrent directory replacement are not guaranteed. See the
 [history schema, recovery matrix and limits](docs/HISTORY.md) before automating.
+
+## View recorded history transitions
+
+Read the committed observations in an explicitly selected history directory:
+
+```sh
+node bin/contract-watch.js history timeline --dir snapshots/history/demo-v1
+node bin/contract-watch.js history timeline --dir snapshots/history/demo-v1 --json
+```
+
+Timeline is offline and read-only. It validates the complete store, including
+pending snapshots, before reporting. Only indexed observations appear; pending
+snapshots and abandoned stages are counted separately and never imported.
+Default output is text; `--json` emits independently versioned
+`contract-watch-history-timeline` v1. Valid reports exit 0, including pending
+files or unavailable comparisons; errors exit 1 with empty stdout. There is no
+`--exit-code` option. Other history commands keep their existing JSON/exit policy.
+
+Observations stay in **index ordinal order**, without sorting by height or capture
+time. Adjacent pairs show target code fingerprints/raw slot differences and
+separate implementation address/code comparisons. Skipped, missing and changed
+provenance observations retain the existing diff rules. A decreasing-height
+pair is explicitly unavailable (`ORDER`), with no fabricated empty change set;
+later adjacent pairs can still be compared. V4 histories with unknown genesis
+can display zero or one observation, but two or more fail `GENESIS_UNAVAILABLE`.
+No hash is inferred to enable comparison.
+
+Equal heights/timestamps and repeated recorded states remain visible. Notices
+identify decreasing time/height, same-height different hashes and conflicting
+data at a repeated hash, including nonadjacent observations. They do not establish
+an upgrade, reorg, canonical chain or finality. Differences compare only saved
+endpoints; neither intermediate events nor their timing are known. Matching
+endpoints do not exclude changes between them. See the [timeline schema and
+ordering policy](docs/HISTORY.md#read-only-timeline) and [synthetic expected
+report](test/fixtures/timeline/expected.txt).
 
 ## Record genesis identity
 

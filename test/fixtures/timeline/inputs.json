@@ -1,0 +1,75 @@
+[
+  {
+    "schemaVersion": 2,
+    "source": "synthetic",
+    "capturedAt": "2026-10-19T08:00:00.000Z",
+    "chainId": "1",
+    "address": "0x1111111111111111111111111111111111111111",
+    "block": {
+      "number": "0x64",
+      "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "code": "0x60",
+    "slots": {
+      "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "beacon": "0x0000000000000000000000003333333333333333333333333333333333333333"
+    },
+    "implementation": {
+      "status": "observed",
+      "via": "beacon",
+      "address": "0x2222222222222222222222222222222222222222",
+      "code": "0x61",
+      "beacon": "0x3333333333333333333333333333333333333333",
+      "raw": "0x0000000000000000000000002222222222222222222222222222222222222222"
+    }
+  },
+  {
+    "schemaVersion": 2,
+    "source": "synthetic",
+    "capturedAt": "2026-10-19T08:01:00.000Z",
+    "chainId": "1",
+    "address": "0x1111111111111111111111111111111111111111",
+    "block": {
+      "number": "0x66",
+      "hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "code": "0x60",
+    "slots": {
+      "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "beacon": "0x0000000000000000000000003333333333333333333333333333333333333333"
+    },
+    "implementation": {
+      "status": "observed",
+      "via": "beacon",
+      "address": "0x4444444444444444444444444444444444444444",
+      "code": "0x62",
+      "beacon": "0x3333333333333333333333333333333333333333",
+      "raw": "0x0000000000000000000000004444444444444444444444444444444444444444"
+    }
+  },
+  {
+    "schemaVersion": 2,
+    "source": "synthetic",
+    "capturedAt": "2026-10-19T08:02:00.000Z",
+    "chainId": "1",
+    "address": "0x1111111111111111111111111111111111111111",
+    "block": {
+      "number": "0x67",
+      "hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "code": "0x63",
+    "slots": {
+      "implementation": "0x0000000000000000000000004444444444444444444444444444444444444444",
+      "admin": "0x0000000000000000000000005555555555555555555555555555555555555555",
+      "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "implementation": {
+      "status": "observed",
+      "via": "implementation-slot",
+      "address": "0x4444444444444444444444444444444444444444",
+      "code": "0x62"
+    }
+  }
+]

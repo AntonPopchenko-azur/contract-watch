@@ -4,6 +4,7 @@ import { snapshotReport, diffReport, diffDocument } from '../src/report.js';
 import { timeout, concurrency, retries, deadline, retryOptions } from '../src/validate.js';
 import { fail, publicError } from '../src/errors.js';
 import { historyOperation } from '../src/history.js';
+import { historyTimeline, timelineReport } from '../src/timeline.js';
 import { migrateFile } from '../src/migration.js';
 import { configuredCapture, MAX_CONFIG_TARGETS } from '../src/config.js';
 import { captureMany } from '../src/batch.js';
@@ -20,6 +21,7 @@ Usage:
   contract-watch history add SOURCE.json --dir TARGET_DIR
   contract-watch history verify --dir TARGET_DIR
   contract-watch history recover SOURCE.json --dir TARGET_DIR
+  contract-watch history timeline --dir TARGET_DIR [--json]
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
@@ -30,12 +32,15 @@ History commands (offline):
   add                Copy one validated snapshot and append an immutable index entry
   verify             Validate all indexed/pending snapshots; no writes or network
   recover            Confirm only SOURCE's pending snapshot, or interrupted empty init
+  timeline           Read committed observations in index order; text or --json v1
 History keeps source bytes/timestamps; identical observations are idempotent.
 One target/chain/source/snapshot-version/genesis identity per directory.
 128 indexed observations, 512 directory entries; index files at most 4 KiB each.
 Snapshot publishes before its index entry; only indexed observations are committed.
 Concurrent writers never overwrite; on conflict verify and retry explicitly.
-No automatic import, timeline, pruning or live capture changes. See docs/HISTORY.md.
+Timeline compares adjacent endpoints only; decreasing-height pairs are unavailable.
+V4 comparisons require observed genesis; pending/stages are counted but excluded.
+No inferred intermediate events, automatic import or pruning. See docs/HISTORY.md.
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -191,21 +196,23 @@ function parseMigration(args) {
 
 function parseHistory(args) {
   const [operation, ...rest] = args;
-  if (!['init', 'add', 'verify', 'recover'].includes(operation)) fail('USAGE');
-  let input, directory;
+  if (!['init', 'add', 'verify', 'recover', 'timeline'].includes(operation)) fail('USAGE');
+  let input, directory, json = false;
   for (let index = 0; index < rest.length; index++) {
     const token = rest[index];
     if (token === '--dir') {
       if (directory !== undefined) fail('USAGE');
       directory = rest[++index];
       if (!directory || directory.startsWith('-')) fail('USAGE');
+    } else if (token === '--json' && operation === 'timeline' && !json) {
+      json = true;
     } else {
       if (!token || token.startsWith('-') || input !== undefined) fail('USAGE');
       input = token;
     }
   }
-  if (!directory || (operation === 'verify' ? input !== undefined : !input)) fail('USAGE');
-  return { operation, input, directory };
+  if (!directory || (['verify', 'timeline'].includes(operation) ? input !== undefined : !input)) fail('USAGE');
+  return { operation, input, directory, json };
 }
 
 async function main(args) {
@@ -216,7 +223,13 @@ async function main(args) {
     process.stdout.write('0.1.0\n'); return;
   }
   if (args[0] === 'history') {
-    const result = await historyOperation(parseHistory(args.slice(1)));
+    const options = parseHistory(args.slice(1));
+    if (options.operation === 'timeline') {
+      const result = await historyTimeline(options.directory);
+      process.stdout.write(`${options.json ? JSON.stringify(result, null, 2) : timelineReport(result)}\n`);
+      return;
+    }
+    const result = await historyOperation(options);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (result.status === 'pending') process.exitCode = 1;
     return;

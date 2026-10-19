@@ -3,8 +3,9 @@
 Added 2026-10-15. History is an offline store of explicitly selected saved
 snapshots, separate from live capture. It does not read RPC/config environment
 variables, connect to a provider, migrate a snapshot, discover target folders,
-import neighboring files or infer missing observations. Timeline, pruning,
-watching, stability and reorg analysis remain separate roadmap items.
+import neighboring files or infer missing observations. Read-only timeline was
+added 2026-10-19. Pruning, watching, stability and reorg analysis remain separate
+roadmap items.
 
 ## Commands and identity
 
@@ -23,9 +24,11 @@ snapshot file first, then select it for `history add`. `init SOURCE --dir NEW`
 exclusively creates a private directory in an existing parent and binds its
 identity from SOURCE. **Init creates an empty index; it does not add SOURCE.**
 Existing directories, files and symlinks are refused. `add SOURCE --dir DIR`
-adds exactly that observation. `verify --dir DIR` is read-only. No other flags
-are accepted; each command requires exactly one `--dir`. Only verify omits
-SOURCE. Prefix paths beginning with `-` with `./`.
+adds exactly that observation. `verify --dir DIR` is read-only. Each command
+requires exactly one `--dir`. Verify and timeline omit SOURCE; only timeline
+accepts the optional valueless `--json` flag. Other flags, duplicate flags and
+positional arguments to verify/timeline are rejected. Prefix paths beginning
+with `-` with `./`.
 
 Identity consists of the exact normalized **address, decimal chain ID, source
 kind, snapshot version and genesis state/hash**. Each component must match the
@@ -171,9 +174,117 @@ manual deletion. Unknown names, directories, symlinks and special files are
 refused and preserved. No recursive deletion, pruning or deletion based solely
 on a filename pattern is implemented.
 
-## Reports, resource bounds and limits
+## Read-only timeline
 
-Success stdout is one JSON object with exactly `kind: "contract-watch-history-result"`,
+```sh
+node bin/contract-watch.js history timeline --dir snapshots/history/demo-v1
+node bin/contract-watch.js history timeline --json --dir snapshots/history/demo-v1
+```
+
+The caller selects one existing initialized history directory. No config/env,
+RPC, discovery, migration, imports, recovery or filesystem writes occur. All
+committed and pending snapshots and the entire index must validate. A malformed
+pending file, missing committed file, mixed identity, foreign name or broken
+chain fails the report; invalid records are never silently skipped. Stages are
+checked for type/size and counted, but their partial contents are never parsed
+as observations. Pending and stages are excluded from comparisons.
+
+Timeline returns observations in **index ordinal order** (publication order).
+It never sorts, reverses, merges, fills gaps or infers events. CapturedAt stays
+the recorded UTC string; block numbers stay canonical hexadecimal strings in
+JSON and use exact BigInt decimal rendering in text. Equal heights, equal times,
+repeated states and distinct later captures of the same block remain visible.
+An identical logical capture already deduplicated by add has only one ordinal.
+Zero observations produce an empty observation/pair list; one produces no pairs.
+
+Each adjacent pair uses the existing strict diff comparison, including snapshot
+version, chain, target, source and v4 genesis requirements. Target code compares
+full decoded-equivalent hex bytes; all three raw slot words compare exactly.
+Implementation address/code changes are separate, and compare only available
+observations of the same provenance. `no-code` is a recorded empty-code endpoint;
+`skipped` and `not-recorded` are unavailable, never empty or unchanged code.
+Changed provenance is explicit and produces no implementation changes. V1 has
+no saved implementation observation. No recursion or beacon resolution occurs.
+
+The policies for irregular order and identity are:
+
+| Condition | Timeline behavior |
+| --- | --- |
+| Later ordinal has a lower height | Retain both observations; that adjacent pair is `unavailable` with fixed `ORDER` reason, without `changed`, `changes` or `implementation` fields. Continue with subsequent adjacent pairs; never reverse the pair. |
+| Equal height or equal capture time | Compare in index order; no inferred elapsed time, ancestry or missing event. |
+| Capture time decreases | Retain and compare in index order, subject to the height/identity rules; emit `CAPTURE_TIME_DECREASED`. |
+| Same height, different hash | Retain observations and emit `SAME_HEIGHT_DIFFERENT_HASH`; do not select a canonical branch or label a reorg. |
+| Same hash, conflicting recorded state/height | Emit `INCONSISTENT_BLOCK_DATA`; missing implementation history alone is not a contradiction. |
+| V4 unknown genesis, 0 or 1 committed observations | Display the recorded identity/observation; no comparison is performed. |
+| V4 unknown genesis, 2 or more committed observations | Fail the entire report with `GENESIS_UNAVAILABLE`, including a decreasing-height pair. No partial stdout or successful unavailable-genesis report. |
+| Different version, target, chain, source or genesis within the store | Fail strict history validation; no mixed-identity comparison. |
+
+Height/time decrease notices refer to the preceding ordinal. Hash notices scan
+the entire earlier prefix and identify the earliest conflicting peer per category
+for each current observation, including nonadjacent peers. Cross-observation code
+consistency notices use bounded SHA-256 summaries, raw slots, number and recorded
+implementation details; adjacent diffs still compare full code bytes. Notices
+are not an exhaustive list of every conflicting pair, nor does their absence
+prove consistency, provider honesty or authenticity. No reorg reconstruction,
+stability policy, upgrade detection, finality or canonical-chain claim is made.
+Unchanged endpoints cannot rule out intermediate changes; changed endpoints do
+not identify the number, cause, block or time of events between them.
+
+### Timeline JSON v1 and exit policy
+
+The report is independently versioned from snapshots and history storage:
+
+| Field | Meaning |
+| --- | --- |
+| `kind`, `schemaVersion`, `order` | `contract-watch-history-timeline`, integer `1`, `index` |
+| `identity` | Exact history header identity, including snapshotVersion and genesis |
+| `committed`, `pending`, `staged` | Counts; only committed observations enter the timeline |
+| `observations` | Ordered `{ordinal, observationId, capturedAt, block, code, slots, implementation}` summaries |
+| `transitions` | Adjacent `{from, to, status}` pairs, with the fields described below |
+| `notices` | Ordered `{code, beforeOrdinal, afterOrdinal}` records |
+| `caveats` | Fixed explanatory strings about endpoint-only evidence and excluded data |
+
+`code` is `{bytes, sha256}`. Each slot is `{raw, status, address}`, with status
+`empty`, `address` or `noncanonical`, and null address unless canonical/nonzero.
+Implementation is null for v1; otherwise it retains `status`, skip `reason` or
+available `via`, `address`, code fingerprint, and beacon `beacon`/`raw` when
+recorded. Raw bytecode, paths, filenames, config/env references and arbitrary
+on-disk text never enter the report.
+
+A `compared` transition has `changed`, target `changes`, and `implementation`
+(null for v1). Change entries and implementation comparison fields have exactly
+the existing diff semantics: target fields are `code`, `implementation`, `admin`,
+`beacon`; implementation fields are `address` and `code`. Implementation carries
+`comparison` (`comparable`, `unavailable` or `provenance-changed`), both summarized
+endpoints and `changes`. `changed` means either comparable change list is nonempty;
+false does not mean missing/uncompared implementation state stayed unchanged.
+An `unavailable` transition has only `from`, `to`, `status` and fixed
+`reason: {code: "ORDER", message: ...}`. Notices for each observation appear in
+height-decrease, time-decrease, height-conflict, hash-conflict order when applicable.
+See [independent synthetic JSON](../test/fixtures/timeline/expected.json) and
+[text](../test/fixtures/timeline/expected.txt).
+
+A valid text/JSON timeline exits **0**, including nonzero pending/stage counts,
+notices and unavailable decreasing-height comparisons. Errors exit **1**, with
+empty stdout and fixed safe stderr, and there is no exit 2 or `--exit-code`.
+No output is emitted until every read, consistency recheck and close succeeds.
+An interrupt before output uses normal offline process behavior and makes no
+history changes; output delivery itself is not a filesystem transaction.
+
+Timeline performs two complete validation passes and up to 128 committed
+snapshot rereads, comparing store metadata/digests and root identity/mtime/ctime
+across the operation. It retains summaries plus adjacent raw snapshots, rather
+than all historical bytecode. At most 128 observations, 127 pairs and 508 notices
+are produced. Existing file/nesting/count limits are unchanged; a conservative
+read budget is below 865 MiB including index files at every maximum, with no
+filesystem latency deadline. Stable changes during traversal fail safely with
+HISTORY_CHANGED or HISTORY_CORRUPT; callers can retry explicitly after writers
+finish. These checks are not a lock or atomic filesystem snapshot. Trusted path
+and hostile-race limits below still apply.
+
+## Other history reports, resource bounds and limits
+
+Init/add/verify/recover success stdout is one JSON object with exactly `kind: "contract-watch-history-result"`,
 `schemaVersion: 1`, `operation`, `status`, `committed`, `pending` and `staged`.
 Add/recover of an observation also includes `observationId`, `ordinal` and the
 safe generated `snapshot` basename. Initialization has no observation fields.
@@ -202,7 +313,7 @@ reads are capped at **768 KiB + 1 detection byte**, with v1 additionally rejecte
 above **512 KiB**. Snapshot schemas and per-code 128 KiB bounds remain unchanged.
 Index reads are capped at **4096 + 1 bytes**. Files are processed sequentially;
 only metadata for the bounded directory is retained, not all snapshot bytecode.
-An operation can read roughly 384 MiB in a maximally populated pending directory;
+One complete validation pass can read roughly 384 MiB in a maximally populated pending directory;
 there is no filesystem latency deadline or large-history optimization here.
 
 Use a local filesystem supporting hard links and trusted parent paths. Parent

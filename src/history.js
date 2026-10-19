@@ -46,7 +46,7 @@ function validateHeader(header) {
   } catch { fail('HISTORY_CORRUPT'); }
 }
 
-async function observation(path, code = 'HISTORY_CORRUPT') {
+async function observation(path, code = 'HISTORY_CORRUPT', includeValue = false) {
   const bytes = await readBounded(path, MAX_SNAPSHOT_V4_BYTES, code);
   let value;
   try {
@@ -55,7 +55,7 @@ async function observation(path, code = 'HISTORY_CORRUPT') {
   } catch { fail(code); }
   const canonical = canonicalHistoryJson(value), id = digest(canonical);
   return { bytes, canonical, identity: identityOf(value), id, sha256: digest(bytes), size: bytes.length,
-    capturedAt: value.capturedAt, block: value.block };
+    capturedAt: value.capturedAt, block: value.block, ...(includeValue ? { value } : {}) };
 }
 function entryFor(observed, ordinal, previous) {
   return { kind: 'contract-watch-history-entry', schemaVersion: 1, ordinal, previous,
@@ -109,6 +109,38 @@ function report(operation, status, state, observed, record) {
     committed: state.entries.length, pending: state.snapshots.size - state.entries.length,
     staged: state.stages.length, ...(observed ? { observationId: observed.id } : {}),
     ...(record ? { ordinal: record.ordinal, snapshot: record.snapshot } : {}) };
+}
+
+// Read-only traversal: validate every committed AND pending file before visiting
+// indexed observations. Re-read one snapshot at a time, then validate the store
+// again before returning. A visitor must retain summaries, not all raw code.
+// Callers must not publish output until this function has returned and closed.
+export async function visitCommittedHistory(directory, visit) {
+  if (typeof directory !== 'string' || !directory || typeof visit !== 'function') fail('USAGE');
+  let root;
+  try {
+    root = await openHistoryRoot(directory);
+    const before = await checkRoot(root), state = await loadHistory(root);
+    for (const record of state.committed.values()) {
+      await checkRoot(root);
+      const observed = await observation(join(root.path, snapshotName(record.observationId)), 'HISTORY_CORRUPT', true);
+      if (!equal(observed.identity, state.header.identity) ||
+          !equal(entryFor(observed, record.ordinal, record.previous), record)) fail('HISTORY_CHANGED');
+      visit(observed.value, record);
+    }
+    const final = await loadHistory(root), after = await checkRoot(root);
+    const signature = value => ({ names: value.names, header: value.header, previous: value.previous,
+      snapshots: [...value.snapshots], committed: [...value.committed] });
+    if (before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs ||
+        !equal(signature(state), signature(final))) fail('HISTORY_CHANGED');
+    return { identity: state.header.identity, committed: state.entries.length,
+      pending: state.snapshots.size - state.entries.length, staged: state.stages.length };
+  } catch (error) {
+    if (error instanceof WatchError) throw error;
+    fail('HISTORY_CORRUPT');
+  } finally {
+    try { await root?.file.close(); } catch { fail('HISTORY_CORRUPT'); }
+  }
 }
 
 export async function historyOperation({ operation, input, directory }) {

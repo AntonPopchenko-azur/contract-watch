@@ -24,7 +24,7 @@ export function observation(snapshot) {
   return 'No EIP-1967 target found; other proxy patterns may exist.';
 }
 
-function codeDetails(code) {
+export function codeDetails(code) {
   const bytes = Buffer.from(code.slice(2), 'hex');
   return { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
 }
@@ -33,7 +33,7 @@ function codeSummary({ bytes, sha256 }) {
   return `${bytes} bytes, SHA-256 ${sha256}`;
 }
 
-function slotDetails(raw) {
+export function slotDetails(raw) {
   const status = raw === ZERO_WORD ? 'empty'
     : raw.startsWith(`0x${'0'.repeat(24)}`) ? 'address' : 'noncanonical';
   return { raw, status, address: status === 'address' ? `0x${raw.slice(-40)}` : null };
@@ -73,7 +73,7 @@ export function snapshotReport(snapshot, { beaconResolution } = {}) {
   ].join('\n');
 }
 
-function implementationDetails(value) {
+export function implementationDetails(value) {
   if (value.status === 'not-recorded') return { status: value.status };
   if (value.status === 'skipped') return { status: value.status, reason: value.reason };
   return {

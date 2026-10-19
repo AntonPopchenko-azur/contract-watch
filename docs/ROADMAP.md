@@ -24,7 +24,8 @@ Item 23 adds opt-in transient retries and active capture deadlines on 2026-10-11
 Item 24 adds bounded opt-in HTTP 429 waits and testable wait cancellation on 2026-10-12.
 Item 25 adds explicit live interruption, drain and owned-output rollback on 2026-10-12.
 Item 26 adds explicit offline history, immutable indexing and interrupted-write recovery on 2026-10-15.
-Items 27–45 have not started.
+Item 27 adds a read-only timeline of indexed observations on 2026-10-19.
+Items 28–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -243,10 +244,24 @@ There is no worker-owned scheduler or automatic endless backlog.
   cancellation remain unchanged. No timeline, pruning, watch or reorg analysis.
   Completed 2026-10-15.
 
+- [x] **27 — History timeline view.** Add explicit offline history timeline
+  with text and independently versioned JSON v1. Fully validate the selected
+  store, show only committed observations in index order, and count excluded
+  pending snapshots/stages. Compare adjacent target code/raw slots and separate
+  implementation observations under existing provenance/availability rules.
+  Preserve strict v1–v4 identity and refusal to compare unknown v4 genesis;
+  decreasing-height pairs are explicitly unavailable without reversing them.
+  Retain equal/decreasing heights/times and report repeated-hash conflicts,
+  including nonadjacent observations, without inferring upgrades, intermediate
+  events, ancestry, reorgs or finality. Independent text/JSON fixtures and tests
+  cover versions, uint256 precision, ordering, missing data, corruption, bounds,
+  links/special files/races, offline spies and unchanged file metadata/bytes.
+  Document schema, ordering, exit policy and read/consistency limits in HISTORY.md.
+  All 1527 tests, check, demo and changed-JS syntax checks pass. No pruning,
+  watching or event correlation. Completed 2026-10-19.
+
 ## Planned increments
 
-- [ ] **27 — History timeline view.** Present recorded slot/code transitions
-  across many files without implying unobserved intermediate events.
 - [ ] **28 — History pruning preview.** Offer a dry-run retention plan and an
   explicit apply operation that preserves baselines and unrelated files.
 - [ ] **29 — Finite watch sessions.** Add opt-in interval/count/duration limits

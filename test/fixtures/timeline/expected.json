@@ -1,0 +1,282 @@
+{
+  "kind": "contract-watch-history-timeline",
+  "schemaVersion": 1,
+  "order": "index",
+  "identity": {
+    "address": "0x1111111111111111111111111111111111111111",
+    "chainId": "1",
+    "source": "synthetic",
+    "snapshotVersion": 2,
+    "genesis": {
+      "status": "not-recorded"
+    }
+  },
+  "committed": 3,
+  "pending": 0,
+  "staged": 0,
+  "observations": [
+    {
+      "ordinal": 1,
+      "observationId": "9512c265d3e6b02890eea561cc3c42d2652b1d73aa7f482d999dd818b96c67f8",
+      "capturedAt": "2026-10-19T08:00:00.000Z",
+      "block": {
+        "number": "0x64",
+        "hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "code": {
+        "bytes": 1,
+        "sha256": "8d33f520a3c4cef80d2453aef81b612bfe1cb44c8b2025630ad38662763f13d3"
+      },
+      "slots": {
+        "implementation": {
+          "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "status": "empty",
+          "address": null
+        },
+        "admin": {
+          "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "status": "empty",
+          "address": null
+        },
+        "beacon": {
+          "raw": "0x0000000000000000000000003333333333333333333333333333333333333333",
+          "status": "address",
+          "address": "0x3333333333333333333333333333333333333333"
+        }
+      },
+      "implementation": {
+        "status": "observed",
+        "via": "beacon",
+        "address": "0x2222222222222222222222222222222222222222",
+        "code": {
+          "bytes": 1,
+          "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+        },
+        "beacon": "0x3333333333333333333333333333333333333333",
+        "raw": "0x0000000000000000000000002222222222222222222222222222222222222222"
+      }
+    },
+    {
+      "ordinal": 2,
+      "observationId": "a6639c3aff4ddbee76cf95205d9b1e608a06ee834ba6d39b4eac28ef9a9572e1",
+      "capturedAt": "2026-10-19T08:01:00.000Z",
+      "block": {
+        "number": "0x66",
+        "hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "code": {
+        "bytes": 1,
+        "sha256": "8d33f520a3c4cef80d2453aef81b612bfe1cb44c8b2025630ad38662763f13d3"
+      },
+      "slots": {
+        "implementation": {
+          "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "status": "empty",
+          "address": null
+        },
+        "admin": {
+          "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "status": "empty",
+          "address": null
+        },
+        "beacon": {
+          "raw": "0x0000000000000000000000003333333333333333333333333333333333333333",
+          "status": "address",
+          "address": "0x3333333333333333333333333333333333333333"
+        }
+      },
+      "implementation": {
+        "status": "observed",
+        "via": "beacon",
+        "address": "0x4444444444444444444444444444444444444444",
+        "code": {
+          "bytes": 1,
+          "sha256": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+        },
+        "beacon": "0x3333333333333333333333333333333333333333",
+        "raw": "0x0000000000000000000000004444444444444444444444444444444444444444"
+      }
+    },
+    {
+      "ordinal": 3,
+      "observationId": "a98d0d6dca3158d72478e8644c31ff7783a408e1e4640b9f343845cd9183afd6",
+      "capturedAt": "2026-10-19T08:02:00.000Z",
+      "block": {
+        "number": "0x67",
+        "hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "code": {
+        "bytes": 1,
+        "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+      },
+      "slots": {
+        "implementation": {
+          "raw": "0x0000000000000000000000004444444444444444444444444444444444444444",
+          "status": "address",
+          "address": "0x4444444444444444444444444444444444444444"
+        },
+        "admin": {
+          "raw": "0x0000000000000000000000005555555555555555555555555555555555555555",
+          "status": "address",
+          "address": "0x5555555555555555555555555555555555555555"
+        },
+        "beacon": {
+          "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "status": "empty",
+          "address": null
+        }
+      },
+      "implementation": {
+        "status": "observed",
+        "via": "implementation-slot",
+        "address": "0x4444444444444444444444444444444444444444",
+        "code": {
+          "bytes": 1,
+          "sha256": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+        }
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "from": 1,
+      "to": 2,
+      "status": "compared",
+      "changed": true,
+      "changes": [],
+      "implementation": {
+        "comparison": "comparable",
+        "before": {
+          "status": "observed",
+          "via": "beacon",
+          "address": "0x2222222222222222222222222222222222222222",
+          "code": {
+            "bytes": 1,
+            "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+          },
+          "beacon": "0x3333333333333333333333333333333333333333",
+          "raw": "0x0000000000000000000000002222222222222222222222222222222222222222"
+        },
+        "after": {
+          "status": "observed",
+          "via": "beacon",
+          "address": "0x4444444444444444444444444444444444444444",
+          "code": {
+            "bytes": 1,
+            "sha256": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+          },
+          "beacon": "0x3333333333333333333333333333333333333333",
+          "raw": "0x0000000000000000000000004444444444444444444444444444444444444444"
+        },
+        "changes": [
+          {
+            "field": "address",
+            "before": "0x2222222222222222222222222222222222222222",
+            "after": "0x4444444444444444444444444444444444444444"
+          },
+          {
+            "field": "code",
+            "before": {
+              "bytes": 1,
+              "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"
+            },
+            "after": {
+              "bytes": 1,
+              "sha256": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "from": 2,
+      "to": 3,
+      "status": "compared",
+      "changed": true,
+      "changes": [
+        {
+          "field": "code",
+          "before": {
+            "bytes": 1,
+            "sha256": "8d33f520a3c4cef80d2453aef81b612bfe1cb44c8b2025630ad38662763f13d3"
+          },
+          "after": {
+            "bytes": 1,
+            "sha256": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6"
+          }
+        },
+        {
+          "field": "implementation",
+          "before": {
+            "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "status": "empty",
+            "address": null
+          },
+          "after": {
+            "raw": "0x0000000000000000000000004444444444444444444444444444444444444444",
+            "status": "address",
+            "address": "0x4444444444444444444444444444444444444444"
+          }
+        },
+        {
+          "field": "admin",
+          "before": {
+            "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "status": "empty",
+            "address": null
+          },
+          "after": {
+            "raw": "0x0000000000000000000000005555555555555555555555555555555555555555",
+            "status": "address",
+            "address": "0x5555555555555555555555555555555555555555"
+          }
+        },
+        {
+          "field": "beacon",
+          "before": {
+            "raw": "0x0000000000000000000000003333333333333333333333333333333333333333",
+            "status": "address",
+            "address": "0x3333333333333333333333333333333333333333"
+          },
+          "after": {
+            "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "status": "empty",
+            "address": null
+          }
+        }
+      ],
+      "implementation": {
+        "comparison": "provenance-changed",
+        "before": {
+          "status": "observed",
+          "via": "beacon",
+          "address": "0x4444444444444444444444444444444444444444",
+          "code": {
+            "bytes": 1,
+            "sha256": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+          },
+          "beacon": "0x3333333333333333333333333333333333333333",
+          "raw": "0x0000000000000000000000004444444444444444444444444444444444444444"
+        },
+        "after": {
+          "status": "observed",
+          "via": "implementation-slot",
+          "address": "0x4444444444444444444444444444444444444444",
+          "code": {
+            "bytes": 1,
+            "sha256": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d"
+          }
+        },
+        "changes": []
+      }
+    }
+  ],
+  "notices": [],
+  "caveats": [
+    "Only recorded endpoints are compared; intermediate events and their timing are unknown.",
+    "Index order, timestamps and matching hashes do not establish ancestry, upgrades, reorgs, finality or a canonical chain.",
+    "Missing or skipped implementation observations are unavailable, not empty code or evidence of unchanged state.",
+    "Pending snapshots and staging files are excluded from observations and comparisons.",
+    "Observations and code fingerprints are not a safety assessment or independent verification of a provider."
+  ]
+}
