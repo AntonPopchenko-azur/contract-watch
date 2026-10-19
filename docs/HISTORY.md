@@ -1,11 +1,11 @@
-# Explicit local history (version 1)
+# Explicit local history (versions 1 and 2)
 
 Added 2026-10-15. History is an offline store of explicitly selected saved
 snapshots, separate from live capture. It does not read RPC/config environment
 variables, connect to a provider, migrate a snapshot, discover target folders,
 import neighboring files or infer missing observations. Read-only timeline was
-added 2026-10-19. Pruning, watching, stability and reorg analysis remain separate
-roadmap items.
+added 2026-10-19, followed by explicit retention preview/copy the same day.
+Watching, stability and reorg analysis remain separate roadmap items.
 
 ## Commands and identity
 
@@ -25,9 +25,10 @@ exclusively creates a private directory in an existing parent and binds its
 identity from SOURCE. **Init creates an empty index; it does not add SOURCE.**
 Existing directories, files and symlinks are refused. `add SOURCE --dir DIR`
 adds exactly that observation. `verify --dir DIR` is read-only. Each command
-requires exactly one `--dir`. Verify and timeline omit SOURCE; only timeline
+requires exactly one `--dir`. Verify, timeline and prune omit SOURCE; only timeline
 accepts the optional valueless `--json` flag. Other flags, duplicate flags and
-positional arguments to verify/timeline are rejected. Prefix paths beginning
+positional arguments to verify/timeline are rejected. Prune has the dedicated
+options described below. Prefix paths beginning
 with `-` with `./`.
 
 Identity consists of the exact normalized **address, decimal chain ID, source
@@ -64,7 +65,7 @@ The header plus all entry files occupy at most **516 KiB** under the read limits
 The directory reader collects at most **512 names**, including pending snapshots,
 stages and foreign files, and rejects the 513th. No recursive scan occurs.
 
-The closed header schema is:
+The closed ordinary history v1 header schema is:
 
 ```json
 {
@@ -171,7 +172,7 @@ recognized only for counting and regular-file/size checks, and their partial
 contents are not observations. A stopped writer's stages can remain after
 successful recovery. Inspect them manually with all writers stopped before any
 manual deletion. Unknown names, directories, symlinks and special files are
-refused and preserved. No recursive deletion, pruning or deletion based solely
+refused and preserved. No recursive deletion, in-place pruning or deletion based solely
 on a filename pattern is implemented.
 
 ## Read-only timeline
@@ -232,7 +233,9 @@ not identify the number, cause, block or time of events between them.
 
 ### Timeline JSON v1 and exit policy
 
-The report is independently versioned from snapshots and history storage:
+The report is independently versioned from snapshots and history storage.
+Ordinary v1 histories retain the following timeline v1 contract. Retention v2
+histories emit timeline v2 with the extra provenance described below:
 
 | Field | Meaning |
 | --- | --- |
@@ -281,6 +284,202 @@ filesystem latency deadline. Stable changes during traversal fail safely with
 HISTORY_CHANGED or HISTORY_CORRUPT; callers can retry explicitly after writers
 finish. These checks are not a lock or atomic filesystem snapshot. Trusted path
 and hostile-race limits below still apply.
+
+## Explicit retention copy
+
+Added 2026-10-19. Preview is the default and makes **no writes**:
+
+```sh
+node bin/contract-watch.js history prune --dir snapshots/history/demo-v1 --keep-last 2
+```
+
+The fixed policy keeps the first committed observation as the **baseline** and
+the last N committed observations in index order, without duplicates. N is
+required, canonical ASCII decimal **0–128**, without leading zeros, signs,
+fractions, whitespace, hex or exponents. N=0 keeps only the baseline; an empty
+history stays empty. If the union selects all observations, `selectionChanged`
+is false. Equal or decreasing heights/timestamps and repeated states do not
+alter the selection. No current clock, chain continuity or event inference is used.
+
+All source index records, committed/pending snapshots and identity are validated
+under existing limits. Foreign names, malformed data, final symlinks, special
+files and incompatible identity fail closed and remain untouched. Pending files
+and abandoned stages remain in the source and are never selected, imported or
+deleted. Prune additionally reads stages as bounded opaque bytes to bind the
+plan to their contents; their bytes are not parsed as snapshots or printed.
+Neighboring files outside the selected source are neither discovered nor copied.
+
+### Plan v1 and explicit apply
+
+Dry-run stdout is one `contract-watch-retention-plan`, `schemaVersion: 1`:
+
+| Field | Contract |
+| --- | --- |
+| `sourceState` | Opaque lowercase SHA-256 of the verified source filesystem state |
+| `identity` | Exact history identity; unknown genesis remains unknown |
+| `source` | `{historyVersion, committed, pending, staged}` for this source |
+| `policy` | `{kind: "baseline-and-last", keepLast: N, order: "index"}` |
+| `selectionChanged` | True only if at least one committed observation is excluded from the copy |
+| `retained`, `excluded` | Counts of selected and excluded committed observations |
+| `excludedSnapshotBytes` | Sum of excluded snapshots' stored byte lengths; **not** reclaimed disk space |
+| `observations` | Every committed observation in original index order, with a decision |
+| `sourceUnchanged`, `freesSpace` | Always true and false respectively |
+| `caveats` | Fixed source-preservation, renumbering and space limitations |
+| `planId` | SHA-256 of canonical JSON of all preceding plan fields, excluding planId itself |
+
+Each observation is exactly `{ordinal, observationId, capturedAt, block, bytes,
+sha256, action, reason, newOrdinal}`. Action is `keep` or `exclude`; reason is
+`baseline` for the first record, otherwise `recent` for selected records or
+`outside-retention`. New ordinals are contiguous 1..K for the kept observations
+in original order; excluded records have null newOrdinal. There is no silent
+renumbering of the old index. Code, paths, filenames and arbitrary disk strings
+are absent. Chain IDs, block numbers and capturedAt retain exact snapshot values.
+See the [independently assembled expected plan](../test/fixtures/retention/plan.json)
+and its [synthetic provenance](../test/fixtures/retention/README.md).
+
+`sourceState` binds sorted filenames, byte hashes/lengths and filesystem metadata
+(device, inode, mode, link count, size, nanosecond mtime/ctime) for the source root
+and files. All file bytes, including index encodings, pending and stage data,
+participate. Access time is excluded. Repeated previews of unchanged data on the
+same filesystem are deterministic; chmod/touch, a replaced directory, copied
+history or any changed source file invalidates the previous binding. The digest
+does not expose filesystem metadata or paths. It is a consistency token, not
+an authenticated signature or protection against a malicious filesystem.
+
+After reviewing the plan, use its exact lowercase 64-hex planId with the same
+directory and N, and an explicit new output directory in an existing parent:
+
+```sh
+node bin/contract-watch.js history prune --dir snapshots/history/demo-v1 --keep-last 2 \
+  --apply PLAN_ID --out-dir snapshots/history/retained-001
+```
+
+Replace `PLAN_ID` with the preview value. The command recomputes the complete
+plan; a different binding/policy gives `RETENTION_PLAN` before output creation.
+An ID is not a filename, and no edited JSON plan is executed. If saving preview
+stdout, choose a path outside the source: a plan file inside the source would
+be a foreign file and invalidate it. A tool update may also change the plan
+contract; preview again instead of forcing an old ID.
+
+`--apply` and `--out-dir` are required together. Missing, duplicate or unknown
+flags, positional files, `--json`, `--exit-code`, live/config options and malformed
+IDs are rejected. There is no automatic apply or retry. The destination must
+not exist, including as an empty directory, symlink, hard link or file, and must
+be outside the source (also checked through resolved parent paths). Its parent
+must already exist and be a real directory; final parent symlinks are refused.
+
+Apply copies selected snapshot bytes to independent inodes, preserving exact
+snapshot content, capturedAt, identity, genesis and migration/implementation
+provenance. Source permissions and filesystem timestamps stay unchanged. New
+files use 0600 and the new directory 0700, subject to umask; destination mtimes
+record creation. Source snapshots are not hard-linked into the copy. A selection
+excluding nothing still creates an explicit complete copy; an empty selection
+creates a valid empty history. Repeating apply requires another fresh destination.
+
+**Apply reclaims no space and never deletes, renames or rewrites the source.**
+It increases usage by the new selected snapshots/index. The source remains the
+backup containing excluded records, pending data, stages and prior provenance.
+After separately verifying the copy and preserving backups, any later archive,
+relocation or deletion is a manual decision outside this command. No recursive
+deletion, stage sweep, watch loop or retention scheduler is implemented.
+
+### History v2 compatibility and retained prefix
+
+Only apply creates history v2. Its header has exactly `kind`, `schemaVersion: 2`,
+`identity` and `retention`. Kind and identity keep their v1 meanings. Retention
+has exactly these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `policy`, `keepLast` | `baseline-and-last` and integer N in 0..128 |
+| `sourceState`, `planId` | The reviewed source and plan bindings |
+| `sourceCommitted`, `sourcePending`, `sourceStaged` | Verified source counts under the original 128/512 limits |
+| `ordinals` | Original source ordinals of the retained prefix, in copy order |
+| `observationsSha256` | SHA-256 of canonical JSON of that prefix's ordered observation-ID array |
+
+Ordinals must equal the exact baseline/last-N policy for sourceCommitted.
+Source counts must fit the original directory bound. The current index must
+contain at least the retained prefix, and its first K observation IDs must match
+observationsSha256. Missing/reordered prefix observations, unknown fields and
+invalid provenance fail strict validation. The header stays under **4 KiB**;
+the immutable entry schema remains **v1** with the same strict fields, but the
+new ordinal/previous values bind the new header and selected sequence. Nothing
+in the original index is rewritten. Snapshot v1–v4 formats are unchanged.
+
+Current verify/add/recover accept both history v1 and v2. Ordinary init continues
+to create v1. Verify and add/recover retain their existing result/exit formats.
+Later additions append after the retained prefix without changing its provenance.
+Another explicit prune can copy a v2 source; its mapping refers to that immediate
+source, whose unchanged backup preserves earlier provenance. There is no implicit
+flattening of retention chains or conversion back to v1. Older binaries reject
+v2 headers safely; original v1 histories remain readable by them.
+
+Timeline uses **report v2** for a v2 history: the v1 fields/semantics remain, with
+`retention` equal to the validated header object and an added caveat that excluded
+observations may contain changes absent from the copy. Text shows the original
+ordinal mapping for the retained prefix; later entries are identified as additions
+after retention. Only saved endpoints are compared. Missing observations never
+prove absence of intermediate changes, and unknown v4 genesis still prevents
+comparison of two or more observations. V1 history timeline reports remain v1
+and byte-compatible with their existing fixtures.
+
+### Publication, interruption and resources
+
+Apply creates the destination exclusively, publishes each complete selected
+snapshot and rebuilt entry without overwrite, verifies their bytes, and rechecks
+the source binding. It publishes **index.json last** using the existing fsync/
+hard-link protocol. That header link is the **whole-copy commit point**. Before
+it, even a complete-looking entry prefix lacks a valid history header and verify/
+timeline refuse it. After it, the copy is structurally complete. The command then
+validates the whole copy and source again and closes all handles before stdout.
+
+Destination conflicts never reuse files, even when bytes match. Concurrent
+applies to the same path compete on exclusive mkdir; one wins. A concurrent
+source writer invalidates the binding and causes a fixed failure when detected.
+Source and destination identity are checked around work; byte/metadata rechecks
+detect stable replacement or interference. These separate syscalls are not a
+lock or atomic snapshot of two directories. In particular a source change after
+the last pre-publication check can be detected after header commit: the copy may
+remain complete but the command fails with empty stdout. No rollback deletes it.
+
+| Interrupted or failed state | Safe next step |
+| --- | --- |
+| No destination created | Verify source, preview again if it changed, then explicitly retry |
+| Destination exists without index.json | Preserve/inspect it as an incomplete copy; use a fresh destination and valid plan to retry |
+| Header committed, stdout absent/error | Verify the destination and inspect provenance/source; it may be complete despite the missing report |
+| Existing complete or partial destination | Never overwrite or automatically resume it; a repeat requires a new path |
+| Source changed | Obtain a new dry-run plan after the writer finishes; old IDs are refused |
+
+Do not use ordinary history recover to resume a partial retention copy: its
+source sequence/provenance has a separate whole-copy commit. Fresh-destination
+retry is the supported recovery. Normal offline SIGINT/SIGTERM/SIGKILL behavior
+applies; no live cancellation handlers are installed. An interruption can leave
+owned staging files or complete published files. Only the active publisher's
+verified own stage may be cleaned up during normal error handling; user files,
+source files and destination directories are never removed. Power-loss/directory
+durability and hostile path-swap limits of ordinary history still apply.
+
+Both preview and successful apply exit **0** with one JSON object and empty
+stderr, regardless of exclusions or pending/stage counts. Apply returns
+`contract-watch-retention-result` v1 with status `copied`, planId, sourceState,
+historyVersion 2, retained/excluded counts, sourceUnchanged true, freesSpace false
+and retention provenance. No stdout is emitted before validation and closing
+succeed. Errors exit **1** with empty stdout and fixed safe stderr; no raw paths,
+provider data, disk strings or stacks. Source validation uses existing HISTORY
+errors; stale plans use RETENTION_PLAN, invalid N RETENTION_KEEP, unsuitable
+destinations RETENTION_DESTINATION/HISTORY_EXISTS, and copy I/O/cleanup/close
+failures RETENTION_WRITE. Partial results remain possible after any error.
+
+The original **128 indexed observations, 512 filenames, 4 KiB index files,
+512/768 KiB snapshots and 128 KiB per code blob** remain unchanged. No source
+counts are increased to accommodate retention. A copy uses at most 257 published
+files plus one publisher stage. One source checkpoint validates the complete
+store, fingerprints bounded file bytes, then rechecks metadata/names. Preview
+uses one checkpoint; apply uses three plus selected snapshot reads and copy
+verification. A conservative aggregate read bound is below **3 GiB** per apply,
+with bounded per-file buffers and retained metadata rather than all raw code.
+There is no filesystem latency deadline, power-loss transaction guarantee or
+large-history optimization; stop other writers and use trusted local paths.
 
 ## Other history reports, resource bounds and limits
 

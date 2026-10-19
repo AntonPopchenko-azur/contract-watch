@@ -768,7 +768,7 @@ entries, each at most **4 KiB**. Each entry binds its snapshot's bytes, identity
 metadata and the previous entry. The reader accepts at most **512** directory
 entries; snapshots retain their 512/768 KiB limits. All indexed and pending
 snapshots are strictly validated. No target discovery, recursive import, config,
-network, pruning or watch loop is enabled.
+network or watch loop is enabled. Retention below requires explicit selection.
 
 A snapshot is published before its index entry. Until that entry exists it is
 **pending**, not committed. After an interrupted add, inspect the counts with
@@ -804,7 +804,8 @@ Timeline is offline and read-only. It validates the complete store, including
 pending snapshots, before reporting. Only indexed observations appear; pending
 snapshots and abandoned stages are counted separately and never imported.
 Default output is text; `--json` emits independently versioned
-`contract-watch-history-timeline` v1. Valid reports exit 0, including pending
+`contract-watch-history-timeline` v1 for ordinary histories, or v2 with retention
+provenance for compact copies. Valid reports exit 0, including pending
 files or unavailable comparisons; errors exit 1 with empty stdout. There is no
 `--exit-code` option. Other history commands keep their existing JSON/exit policy.
 
@@ -825,6 +826,61 @@ endpoints; neither intermediate events nor their timing are known. Matching
 endpoints do not exclude changes between them. See the [timeline schema and
 ordering policy](docs/HISTORY.md#read-only-timeline) and [synthetic expected
 report](test/fixtures/timeline/expected.txt).
+
+## Preview a retained history copy
+
+Preview a deterministic selection from one explicit history directory:
+
+```sh
+node bin/contract-watch.js history prune --dir snapshots/history/demo-v1 --keep-last 10
+```
+
+This command only reads files and emits a JSON plan. The policy always keeps the
+first committed baseline plus the last N committed observations in **index order**;
+N is canonical decimal **0–128**. Zero keeps only the baseline, if one exists.
+There is no clock-based cutoff, timestamp/height sorting or removal of repeated
+states. Each observation has a keep/exclude decision, reason and proposed new
+ordinal. Pending snapshots and abandoned stages stay in the source, outside the
+selection. Invalid or foreign files fail validation and remain untouched.
+
+After reviewing the plan, substitute its exact 64-character `planId` for
+`PLAN_ID` below and explicitly choose a **new directory outside the source**:
+
+```sh
+node bin/contract-watch.js history prune --dir snapshots/history/demo-v1 --keep-last 10 \
+  --apply PLAN_ID --out-dir snapshots/history/retained-001
+node bin/contract-watch.js history verify --dir snapshots/history/retained-001
+node bin/contract-watch.js history timeline --dir snapshots/history/retained-001
+```
+
+The plan is bound to validated source bytes, filesystem identity and metadata,
+including pending/stage contents. A changed source or different N invalidates
+the ID; preview again. Apply creates independent private copies of selected
+snapshot bytes and a new contiguous index. It **never deletes, rewrites or
+renames the source**, which remains the backup. New files have creation mtimes;
+original bytes, permissions, mtimes, capturedAt, identity, genesis and migration
+provenance remain intact. A selection excluding nothing still creates a full
+explicit copy. Reusing an existing destination is refused, even after success.
+
+The new **history header v2** records original ordinals and the source/plan
+binding; snapshot formats and index-entry v1 stay unchanged. Current verify,
+add/recover and timeline support both history versions. Old binaries reject v2
+copies; original v1 histories and their reports remain compatible. Timeline v2
+shows the retention mapping and warns that excluded observations may contain
+changes. Retention neither recovers unknown v4 genesis nor permits its comparison.
+
+**No disk space is reclaimed.** Apply temporarily uses more space; relocation or
+deletion of the original is a separate manual decision after verification and
+backup. All source data, neighboring files, pending snapshots and stages are
+preserved. There is no implicit apply, pruning scheduler or automatic cleanup.
+
+The destination header publishes last as the whole-copy commit point. Errors or
+interruptions can leave an incomplete destination, or a complete copy without
+a report. Preserve it for inspection and retry with a fresh destination; no
+resume/overwrite or recursive deletion occurs. Preview/apply success exits 0
+with JSON; failures exit 1 with empty stdout and fixed safe stderr. Signals use
+ordinary offline behavior. See the [retention contract](docs/HISTORY.md#explicit-retention-copy)
+for state binding, races, resource bounds and recovery.
 
 ## Record genesis identity
 

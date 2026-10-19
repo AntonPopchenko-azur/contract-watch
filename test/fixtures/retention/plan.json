@@ -1,0 +1,110 @@
+{
+  "kind": "contract-watch-retention-plan",
+  "schemaVersion": 1,
+  "sourceState": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "identity": {
+    "address": "0x1111111111111111111111111111111111111111",
+    "chainId": "1",
+    "source": "synthetic",
+    "snapshotVersion": 2,
+    "genesis": {
+      "status": "not-recorded"
+    }
+  },
+  "source": {
+    "historyVersion": 1,
+    "committed": 5,
+    "pending": 1,
+    "staged": 1
+  },
+  "policy": {
+    "kind": "baseline-and-last",
+    "keepLast": 2,
+    "order": "index"
+  },
+  "selectionChanged": true,
+  "retained": 3,
+  "excluded": 2,
+  "excludedSnapshotBytes": 1762,
+  "observations": [
+    {
+      "ordinal": 1,
+      "observationId": "85554b322479533634cd82cdfb1a2a259d6af1f0ad60222f1bb50b59f1ae0af2",
+      "capturedAt": "2026-10-19T16:00:00.000Z",
+      "block": {
+        "number": "0x64",
+        "hash": "0x1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "bytes": 881,
+      "sha256": "6455938e07a67ea1a19fa4202a9b5392420a7c0d800a0a33217a7f1aa24cc22f",
+      "action": "keep",
+      "reason": "baseline",
+      "newOrdinal": 1
+    },
+    {
+      "ordinal": 2,
+      "observationId": "fc42dba31ffb15422344532f9276dea3eb047070f7e9f0f774ff0e32b3030e14",
+      "capturedAt": "2026-10-19T16:01:00.000Z",
+      "block": {
+        "number": "0x65",
+        "hash": "0x2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "bytes": 881,
+      "sha256": "21764a92afe9261edc2b9ffb42323b44f7c859c22bb8f0900a4f76687939b5d0",
+      "action": "exclude",
+      "reason": "outside-retention",
+      "newOrdinal": null
+    },
+    {
+      "ordinal": 3,
+      "observationId": "a512f79e49ab61be89782826d074cdfd7d9ccf13c460b71e489e95bc63f3777f",
+      "capturedAt": "2026-10-19T16:02:00.000Z",
+      "block": {
+        "number": "0x66",
+        "hash": "0x3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "bytes": 881,
+      "sha256": "9ae02d5bbc8f32b8e49a0355aa524e9227d1376aa953af1a4ff2f5e2dedbb8f4",
+      "action": "exclude",
+      "reason": "outside-retention",
+      "newOrdinal": null
+    },
+    {
+      "ordinal": 4,
+      "observationId": "e7649fa116afc62e0dcb1883340ccf39634f0d848945e7a3b35a6800fc12e632",
+      "capturedAt": "2026-10-19T15:59:00.000Z",
+      "block": {
+        "number": "0x64",
+        "hash": "0x4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "bytes": 881,
+      "sha256": "c12b1977a955280f87732e9b1241d24ede9e49df1c35bacb0540f8e91f96a13f",
+      "action": "keep",
+      "reason": "recent",
+      "newOrdinal": 2
+    },
+    {
+      "ordinal": 5,
+      "observationId": "43bab92216c6044d13fa7a4c95c21ab3f08e28ea9786e9cf56406dc1d5c59245",
+      "capturedAt": "2026-10-19T16:04:00.000Z",
+      "block": {
+        "number": "0x63",
+        "hash": "0x5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      "bytes": 881,
+      "sha256": "8d781a645cb41f7a9d72bd9956b6ca0a18d5a78eb072ebacee7efaf6aeef1ef6",
+      "action": "keep",
+      "reason": "recent",
+      "newOrdinal": 3
+    }
+  ],
+  "sourceUnchanged": true,
+  "freesSpace": false,
+  "caveats": [
+    "Apply copies selected observations to a new history; it never deletes or rewrites the source.",
+    "Pending snapshots, abandoned stages and all source files remain in the source; they are not copied.",
+    "The copy uses new contiguous ordinals and retains their source mapping; excluded observations may contain changes.",
+    "No disk space is reclaimed. Keep the source as backup; any later relocation or deletion is a separate manual decision."
+  ],
+  "planId": "9970298406f3045f3d3e732bd3a4c79b5cf50820f6018bc9b20634d340f07965"
+}

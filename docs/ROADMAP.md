@@ -25,7 +25,8 @@ Item 24 adds bounded opt-in HTTP 429 waits and testable wait cancellation on 202
 Item 25 adds explicit live interruption, drain and owned-output rollback on 2026-10-12.
 Item 26 adds explicit offline history, immutable indexing and interrupted-write recovery on 2026-10-15.
 Item 27 adds a read-only timeline of indexed observations on 2026-10-19.
-Items 28–45 have not started.
+Item 28 adds deterministic retention previews and explicit copies with source backups on 2026-10-19.
+Items 29–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -260,10 +261,25 @@ There is no worker-owned scheduler or automatic endless backlog.
   All 1527 tests, check, demo and changed-JS syntax checks pass. No pruning,
   watching or event correlation. Completed 2026-10-19.
 
+- [x] **28 — History pruning preview.** Add offline history prune with a
+  deterministic baseline-plus-last-N JSON preview and explicit plan-bound apply
+  to a new directory. Bind plans to verified bytes and filesystem metadata;
+  reject stale/substituted plans without overwriting existing destinations.
+  Preserve the entire source, including excluded records, pending/stages and
+  exact selected snapshot bytes, identity, genesis and provenance. New private
+  copies use a strict v2 history header with original ordinals and a retained
+  prefix digest; entry v1 and snapshots stay unchanged. Publish the header last
+  as the whole-copy commit point, preserve partial results and support explicit
+  fresh-destination retry. Timeline v2 exposes retention gaps without inferring
+  intermediate events; original v1 histories/reports remain compatible. Tests
+  cover independent plans, policies, versions, limits, stale state, links/races,
+  failures, real interruption boundaries and offline/source preservation.
+  Document schema/compatibility, recovery and the fact that no disk space is
+  reclaimed. All 1685 tests, check, demo and changed-JS syntax checks pass.
+  No in-place deletion, watch or stability policy. Completed 2026-10-19.
+
 ## Planned increments
 
-- [ ] **28 — History pruning preview.** Offer a dry-run retention plan and an
-  explicit apply operation that preserves baselines and unrelated files.
 - [ ] **29 — Finite watch sessions.** Add opt-in interval/count/duration limits
   and graceful stop; do not create a system scheduler or endless loop.
 - [ ] **30 — Consecutive observation policy.** Allow a configured number of

@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { validateSnapshot, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_V4_BYTES, ZERO_WORD } from './snapshot.js';
 import { address, chainId, data } from './validate.js';
 import { fail, WatchError } from './errors.js';
+import { validateRetention } from './retention-policy.js';
 import { readBounded, parseHistoryJson, openHistoryRoot, checkRoot, historyNames,
   checkHistoryFile, publishHistoryFile, MAX_HISTORY_FILES } from './history-files.js';
 
@@ -30,8 +31,9 @@ function keys(value, expected) {
 }
 function validateHeader(header) {
   try {
-    keys(header, ['kind','schemaVersion','identity']);
-    if (header.kind !== 'contract-watch-history' || header.schemaVersion !== 1) fail('HISTORY_CORRUPT');
+    keys(header, ['kind','schemaVersion','identity', ...(header?.schemaVersion === 2 ? ['retention'] : [])]);
+    if (header.kind !== 'contract-watch-history' || ![1, 2].includes(header.schemaVersion)) fail('HISTORY_CORRUPT');
+    if (header.schemaVersion === 2) validateRetention(header.retention);
     const id = header.identity;
     keys(id, ['address','chainId','source','snapshotVersion','genesis']);
     if (address(id.address) !== id.address || chainId(id.chainId) !== id.chainId ||
@@ -57,16 +59,16 @@ async function observation(path, code = 'HISTORY_CORRUPT', includeValue = false)
   return { bytes, canonical, identity: identityOf(value), id, sha256: digest(bytes), size: bytes.length,
     capturedAt: value.capturedAt, block: value.block, ...(includeValue ? { value } : {}) };
 }
-function entryFor(observed, ordinal, previous) {
+export function entryFor(observed, ordinal, previous) {
   return { kind: 'contract-watch-history-entry', schemaVersion: 1, ordinal, previous,
     observationId: observed.id, snapshot: snapshotName(observed.id), sha256: observed.sha256,
     bytes: observed.size, capturedAt: observed.capturedAt, block: observed.block };
 }
 
-async function loadHistory(root, allowUninitialized = false) {
+export async function loadHistory(root, allowUninitialized = false) {
   const before = await checkRoot(root);
   try {
-    const names = await historyNames(root), snapshots = new Map(), entries = [], stages = [];
+    const names = await historyNames(root), snapshots = new Map(), entries = [], stages = [], files = new Map();
     for (const name of names) {
       if (STAGE_NAME.test(name)) { await checkHistoryFile(root, name, MAX_SNAPSHOT_V4_BYTES); stages.push(name); }
       else if (SNAPSHOT_NAME.test(name)) {
@@ -76,6 +78,7 @@ async function loadHistory(root, allowUninitialized = false) {
         // Retain only bounded metadata, not every snapshot's bytecode/buffers.
         const { bytes, canonical, ...metadata } = observed;
         snapshots.set(observed.id, metadata);
+        files.set(name, { sha256: observed.sha256, bytes: observed.size });
       } else if (ENTRY_NAME.test(name)) entries.push(name);
       else if (name !== 'index.json') fail('HISTORY_DIRECTORY');
     }
@@ -86,6 +89,7 @@ async function loadHistory(root, allowUninitialized = false) {
     }
     const headerBytes = await readBounded(join(root.path,'index.json'), MAX_HISTORY_INDEX_BYTES);
     const header = validateHeader(parseHistoryJson(headerBytes));
+    files.set('index.json', { sha256: digest(headerBytes), bytes: headerBytes.length });
     for (const observed of snapshots.values()) if (!equal(observed.identity, header.identity)) fail('HISTORY_CORRUPT');
     let previous = digest(headerBytes);
     const committed = new Map();
@@ -96,8 +100,14 @@ async function loadHistory(root, allowUninitialized = false) {
       if (!observed || committed.has(observed.id) || !equal(record, entryFor(observed,index + 1,previous))) fail('HISTORY_CORRUPT');
       committed.set(observed.id, record);
       previous = digest(bytes);
+      files.set(name, { sha256: previous, bytes: bytes.length });
     }
-    return { names, stages, snapshots, entries, header, committed, previous };
+    if (header.schemaVersion === 2) {
+      const { ordinals, observationsSha256 } = header.retention;
+      if (committed.size < ordinals.length ||
+          digest(canonicalHistoryJson([...committed.keys()].slice(0, ordinals.length))) !== observationsSha256) fail('HISTORY_CORRUPT');
+    }
+    return { names, stages, snapshots, entries, header, committed, previous, files };
   } finally {
     const after = await checkRoot(root);
     if (before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs) fail('HISTORY_CHANGED');
@@ -134,7 +144,8 @@ export async function visitCommittedHistory(directory, visit) {
     if (before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs ||
         !equal(signature(state), signature(final))) fail('HISTORY_CHANGED');
     return { identity: state.header.identity, committed: state.entries.length,
-      pending: state.snapshots.size - state.entries.length, staged: state.stages.length };
+      pending: state.snapshots.size - state.entries.length, staged: state.stages.length,
+      ...(state.header.schemaVersion === 2 ? { retention: state.header.retention } : {}) };
   } catch (error) {
     if (error instanceof WatchError) throw error;
     fail('HISTORY_CORRUPT');

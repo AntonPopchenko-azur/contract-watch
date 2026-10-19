@@ -59,8 +59,10 @@ export async function historyTimeline(directory) {
     observations.push(current);
     previous = value;
   });
-  return { kind: 'contract-watch-history-timeline', schemaVersion: 1, order: 'index',
-    ...metadata, observations, transitions, notices, caveats: [...CAVEATS] };
+  return { kind: 'contract-watch-history-timeline', schemaVersion: metadata.retention ? 2 : 1, order: 'index',
+    ...metadata, observations, transitions, notices, caveats: [...CAVEATS, ...(metadata.retention ? [
+      'Retention selected a subset of source observations; excluded observations may contain changes absent from this timeline.'
+    ] : [])] };
 }
 
 const codeText = value => `${value.bytes} bytes, SHA-256 ${value.sha256}`;
@@ -81,6 +83,12 @@ export function timelineReport(document) {
     'Order: index ordinal (publication order; no sorting by height or capture time)',
     `Committed: ${document.committed} | Pending excluded: ${document.pending} | Stages excluded: ${document.staged}`
   ];
+  if (document.retention) {
+    const r = document.retention;
+    lines.push(`Retention: baseline and last ${r.keepLast}; ${r.sourceCommitted - r.ordinals.length} source observations excluded from this copy.`,
+      `Source state: ${r.sourceState}`,
+      `Original ordinals for retained prefix: ${r.ordinals.join(', ') || '(empty)'}; subsequent observations were added after retention.`);
+  }
   if (!observations.length) lines.push('No committed observations.');
   for (const value of observations) {
     lines.push('', `Observation ${value.ordinal} | ${value.capturedAt} | ID ${value.observationId}`,

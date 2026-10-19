@@ -5,6 +5,7 @@ import { timeout, concurrency, retries, deadline, retryOptions } from '../src/va
 import { fail, publicError } from '../src/errors.js';
 import { historyOperation } from '../src/history.js';
 import { historyTimeline, timelineReport } from '../src/timeline.js';
+import { pruneHistory } from '../src/retention.js';
 import { migrateFile } from '../src/migration.js';
 import { configuredCapture, MAX_CONFIG_TARGETS } from '../src/config.js';
 import { captureMany } from '../src/batch.js';
@@ -22,6 +23,8 @@ Usage:
   contract-watch history verify --dir TARGET_DIR
   contract-watch history recover SOURCE.json --dir TARGET_DIR
   contract-watch history timeline --dir TARGET_DIR [--json]
+  contract-watch history prune --dir TARGET_DIR --keep-last N
+  contract-watch history prune --dir TARGET_DIR --keep-last N --apply PLAN_ID --out-dir NEW
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
@@ -32,7 +35,9 @@ History commands (offline):
   add                Copy one validated snapshot and append an immutable index entry
   verify             Validate all indexed/pending snapshots; no writes or network
   recover            Confirm only SOURCE's pending snapshot, or interrupted empty init
-  timeline           Read committed observations in index order; text or --json v1
+  timeline           Read committed observations in index order; text or --json v1/v2
+  prune              JSON dry-run: keep first baseline plus last N index entries (0-128)
+  prune --apply ID    Require the exact preview plan ID; copy to explicit --out-dir NEW
 History keeps source bytes/timestamps; identical observations are idempotent.
 One target/chain/source/snapshot-version/genesis identity per directory.
 128 indexed observations, 512 directory entries; index files at most 4 KiB each.
@@ -40,7 +45,10 @@ Snapshot publishes before its index entry; only indexed observations are committ
 Concurrent writers never overwrite; on conflict verify and retry explicitly.
 Timeline compares adjacent endpoints only; decreasing-height pairs are unavailable.
 V4 comparisons require observed genesis; pending/stages are counted but excluded.
-No inferred intermediate events, automatic import or pruning. See docs/HISTORY.md.
+Retention never deletes the source or reclaims disk space; pending/stages stay there.
+Copies use history v2 with explicit original ordinals; timeline emits v2 for these copies.
+Changed source state invalidates the plan. No overwrite, automatic import or watch.
+See docs/HISTORY.md for partial-copy recovery and compatibility limits.
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -215,6 +223,17 @@ function parseHistory(args) {
   return { operation, input, directory, json };
 }
 
+function parsePrune(args) {
+  const options = {}, keys = { '--dir': 'directory', '--keep-last': 'keepLast', '--apply': 'apply', '--out-dir': 'output' };
+  for (let index = 0; index < args.length; index += 2) {
+    const key = Object.hasOwn(keys, args[index]) ? keys[args[index]] : undefined, value = args[index + 1];
+    if (!key || Object.hasOwn(options, key) || !value || value.startsWith('-')) fail('USAGE');
+    options[key] = value;
+  }
+  if (!options.directory || options.keepLast === undefined || (options.apply === undefined) !== (options.output === undefined)) fail('USAGE');
+  return options;
+}
+
 async function main(args) {
   if (args.length === 0 || (args.length === 1 && ['--help', '-h'].includes(args[0]))) {
     process.stdout.write(HELP); return;
@@ -223,6 +242,11 @@ async function main(args) {
     process.stdout.write('0.1.0\n'); return;
   }
   if (args[0] === 'history') {
+    if (args[1] === 'prune') {
+      const result = await pruneHistory(parsePrune(args.slice(2)));
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
     const options = parseHistory(args.slice(1));
     if (options.operation === 'timeline') {
       const result = await historyTimeline(options.directory);
