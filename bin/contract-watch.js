@@ -11,6 +11,7 @@ import { configuredCapture, MAX_CONFIG_TARGETS } from '../src/config.js';
 import { captureMany } from '../src/batch.js';
 import { runLive } from '../src/cancellation.js';
 import { startCapture, capturePolicy } from '../src/capture-policy.js';
+import { runWatch } from '../src/watch.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
@@ -18,6 +19,8 @@ Usage:
   contract-watch snapshot --address ADDRESS --chain-id ID --out FILE [options]
   contract-watch snapshot --config FILE --target NAME --out FILE [options]
   contract-watch snapshot-many --config FILE --target NAME [--target NAME ...] --out-dir NEW [options]
+  contract-watch watch --address ADDRESS --chain-id ID --out-dir NEW --interval-ms MS [--count N] [--duration-ms MS] [options]
+  contract-watch watch --config FILE --target NAME --out-dir NEW --interval-ms MS [--count N] [--duration-ms MS] [options]
   contract-watch history init SOURCE.json --dir NEW
   contract-watch history add SOURCE.json --dir TARGET_DIR
   contract-watch history verify --dir TARGET_DIR
@@ -76,6 +79,21 @@ Diff options:
   --json             Version 1, 2, 3 or 4 JSON report on stdout, matching the input pair
   --exit-code        Exit 2 for state changes, 0 without changes, 1 for errors
 
+Watch options (one explicit target, no scheduler):
+  --out-dir NEW      New private session directory; observation-001.json through 128
+  --interval-ms MS   Required canonical decimal 100-60000; delay after capture/save/cleanup
+  --count N          Canonical decimal 1-128 observation attempts, including failures
+  --duration-ms MS   Canonical decimal 100-600000; monotonic session duration
+Count or duration is required; both stop at the first limit. Always at most 128 attempts.
+First attempt is immediate after validation/directory creation; no overlap or catch-up.
+Duration cancels active RPC/waits; drain file work and remove the unfinished observation.
+Completed observations survive later failures and SIGINT/SIGTERM (exit 130/143).
+Interrupt/global error: empty stdout, fixed safe stderr. Cleanup failure: WATCH_CLEANUP.
+Normal end: session JSON v1; exit 0 with saved observations and no failed/stopped attempts,
+otherwise 1. Retry requires a new directory; no history import/prune or stability claims.
+Common single capture options apply; no --out, --concurrency or --shared-block.
+See docs/WATCH.md for commit points, partial output, crash and filesystem limits.
+
 Batch options:
   --target NAME      Repeat for 1-32 unique targets in explicit input/report order
   --out-dir NEW      New directory in an existing parent; no overwrite
@@ -118,9 +136,11 @@ Capture writes v1/v2 unless --genesis is explicit. Genesis is not proof of netwo
 Beacon results are not saved in v1 files. No safety assessment or complete proxy detection.
 `;
 
-function parseSnapshot(args, many = false) {
+function parseSnapshot(args, many = false, watch = false) {
   const allowed = new Set([
-    ...(many ? ['--out-dir', '--shared-block', '--concurrency'] : ['--address', '--chain-id', '--out', '--rpc']),
+    ...(many ? ['--out-dir', '--shared-block', '--concurrency']
+      : ['--address', '--chain-id', '--rpc', ...(watch
+        ? ['--out-dir', '--interval-ms', '--count', '--duration-ms'] : ['--out'])]),
     '--block', '--block-hash', '--depth', '--timeout-ms', '--retries', '--deadline-ms',
     '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis', '--config', '--target'
   ]);
@@ -142,7 +162,7 @@ function parseSnapshot(args, many = false) {
   }
   if (many) {
     if (!options['--config'] || !options['--target'] || !options['--out-dir']) fail('USAGE');
-  } else if (!options['--out']) fail('USAGE');
+  } else if (!options[watch ? '--out-dir' : '--out']) fail('USAGE');
   if (!many && (options['--config'] || options['--target'])) {
     if (!options['--config'] || !options['--target'] ||
         ['--address', '--chain-id', '--rpc'].some(key => Object.hasOwn(options, key))) fail('USAGE');
@@ -279,6 +299,16 @@ async function main(args) {
       capturePolicy(captureOptions).check();
       await saveSnapshot(options['--out'], snapshot, operation.outputs);
       return { stdout: `${report}\nSnapshot saved.\n` };
+    });
+  }
+  if (args[0] === 'watch') {
+    const options = parseSnapshot(args.slice(1), false, true);
+    if (options['--timeout-ms'] !== undefined && !/^[1-9][0-9]*$/.test(options['--timeout-ms'])) fail('TIMEOUT_OPTION');
+    return runWatch({
+      intervalMs: options['--interval-ms'], count: options['--count'], durationMs: options['--duration-ms'],
+      outputDir: options['--out-dir'], configPath: options['--config'], name: options['--target'],
+      options: { ...captureFlags(options), address: options['--address'], chainId: options['--chain-id'], rpcUrl: options['--rpc'] },
+      includeBeacon: options['--resolve-beacon'] ?? false, includeImplementation: options['--implementation-code'] ?? false
     });
   }
   if (args[0] === 'snapshot-many') {

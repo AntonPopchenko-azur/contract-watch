@@ -1,5 +1,11 @@
 # Local target configuration
 
+[`watch`](WATCH.md), added 2026-10-20, reuses this strict config schema to select
+exactly one target. It validates finite CLI limits before config/env/output and
+reads the selected endpoint once per session. No overrides, fallback, implicit
+selection or new config fields are added. Watch uses `--out-dir NEW`, preserves
+individual completed observations, and has its own documented report/stop policy.
+
 `snapshot --config FILE --target NAME --out NEW.json [capture options]` selects
 exactly one named target from an explicit local file. Multiple definitions are
 allowed; this command captures only one. For several explicit targets, use the

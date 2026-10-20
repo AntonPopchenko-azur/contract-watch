@@ -18,6 +18,7 @@ export function createCapturePolicy(options = {}, runtime = {}) {
   const end = deadlineMs === undefined ? Infinity : now() + deadlineMs;
   let nextId = 0;
   const check = () => {
+    runtime.check?.();
     const remaining = end === Infinity ? Infinity : end - now();
     if (remaining <= 0) fail('CAPTURE_DEADLINE');
     if (signal?.aborted) fail('RETRY_CANCELLED');

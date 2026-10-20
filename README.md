@@ -557,6 +557,43 @@ files may also be visible while a batch is still running. See the
 [full cancellation contract](docs/CANCELLATION.md), including filesystem races,
 startup/after-completion signals and error precedence.
 
+## Run a finite watch session
+
+Use `watch` for one explicit target and a new private directory:
+
+```sh
+node bin/contract-watch.js watch --config examples/targets.json --target demo-main \
+  --out-dir snapshots/watch-001 --interval-ms 1000 --count 10 --duration-ms 60000
+```
+
+Set the selected endpoint environment variable first and create the parent
+directory. Direct `--address`/`--chain-id` with `--rpc` or the existing environment
+variable also works. Config retains its strict validation and prohibits overrides.
+All ordinary single-capture selectors, genesis, implementation and retry options
+work; every observation uses the existing hash-pinned capture/recheck engine.
+
+Interval is required, canonical decimal **100–60000 ms**. Supply count **1–128**
+or duration **100–600000 ms**, or both; missing finite limits fail before env/RPC/
+output. Count includes **failed attempts**, and every session has a 128-attempt
+hard cap. The first attempt starts immediately after setup. Subsequent attempts
+wait a full interval after capture/save/cleanup, without overlap or catch-up.
+Duration and waits use monotonic time; `capturedAt` retains real UTC time.
+
+Files are `observation-001.json` through `observation-128.json`, with gaps for
+failures. Each record commits after publication, temporary cleanup and handle
+closure. Completed records survive later failure or SIGINT/SIGTERM; only the
+current unfinished record is rolled back. Snapshot/batch cancellation is unchanged.
+Duration cancels RPC/waits and drains started filesystem work; it is not a hard
+filesystem wall-time guarantee. No history import/prune or system scheduler runs.
+
+Normal completion emits session JSON v1: exit 0 only with saved observations and
+no failed/stopped attempts, otherwise 1. Global errors and handled SIGINT/SIGTERM
+have empty stdout and fixed safe stderr; signals exit 130/143, first signal wins.
+Partial directories remain for inspection. Retry needs a new directory; crashes,
+SIGKILL and cleanup failures may leave unconfirmed output. See the
+[exact watch contract](docs/WATCH.md) for schemas, commit points, bounds and limits.
+Watch makes no stability, upgrade, event or reorg claims.
+
 ## Observe a beacon implementation
 
 Add the valueless `--resolve-beacon` flag to a snapshot command to observe the

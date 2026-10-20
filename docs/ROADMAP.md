@@ -278,10 +278,23 @@ There is no worker-owned scheduler or automatic endless backlog.
   reclaimed. All 1685 tests, check, demo and changed-JS syntax checks pass.
   No in-place deletion, watch or stability policy. Completed 2026-10-19.
 
+- [x] **29 — Finite watch sessions.** Add one explicit direct/configured target,
+  canonical interval/count/duration limits and a 128-attempt hard cap including
+  failures. Use monotonic fixed-delay admission with no overlap/catch-up and
+  unchanged strict capture/retry/pinning/format budgets. Cancel active RPC/waits
+  at duration or first SIGINT/SIGTERM, drain writers and clean only the current
+  uncommitted observation; retain earlier commits in a new private directory.
+  Fixed ordinal no-overwrite snapshots and session JSON v1 distinguish saved,
+  failed and duration-stopped attempts; signals retain 130/143 and empty stdout.
+  Tests cover fake clocks, boundaries, traces, modes, failures, real signals,
+  publication/cleanup races, foreign files, resource drain and offline reuse.
+  Document precise commit/stop/report and crash/partial-output limits in WATCH.md.
+  All 1900 tests, check, demo and changed-JS syntax checks pass.
+  No scheduler, history import/prune, stability or reorg policy. Completed
+  2026-10-20.
+
 ## Planned increments
 
-- [ ] **29 — Finite watch sessions.** Add opt-in interval/count/duration limits
-  and graceful stop; do not create a system scheduler or endless loop.
 - [ ] **30 — Consecutive observation policy.** Allow a configured number of
   matching observations before marking a transition stable; test flapping.
 - [ ] **31 — Reorg-aware history.** Label displaced block observations and rebuild

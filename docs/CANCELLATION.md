@@ -1,5 +1,13 @@
 # Live capture cancellation
 
+The rules below remain specific to `snapshot`/`snapshot-many`. Added 2026-10-20,
+[`watch`](WATCH.md) uses per-observation commits: earlier completed snapshots
+survive cancellation, only the current unfinished observation is rolled back,
+and the new session directory is retained. It uses distinct WATCH_CANCELLED/
+WATCH_CLEANUP errors, the same first-signal 130/143 policy, and empty stdout on
+interrupt. Its duration also cancels/drains active work. See WATCH.md for the
+separate commit and partial-output contract.
+
 Implemented 2026-10-12 for `snapshot` and `snapshot-many`. There are no new
 flags, config fields, snapshot/report versions, watch loop or provider-wide
 queue in this lifecycle. Offline inspect, diff, migrate and the separate

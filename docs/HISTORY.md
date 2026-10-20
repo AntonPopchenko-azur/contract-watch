@@ -5,7 +5,10 @@ snapshots, separate from live capture. It does not read RPC/config environment
 variables, connect to a provider, migrate a snapshot, discover target folders,
 import neighboring files or infer missing observations. Read-only timeline was
 added 2026-10-19, followed by explicit retention preview/copy the same day.
-Watching, stability and reorg analysis remain separate roadmap items.
+Finite [`watch`](WATCH.md) sessions were added 2026-10-20 as separate new
+directories of ordinary snapshots; they never append/import into a history.
+Explicit history init/add can reuse selected watch snapshots. Stability and
+reorg analysis remain separate roadmap items.
 
 ## Commands and identity
 
