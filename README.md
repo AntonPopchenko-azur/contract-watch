@@ -592,7 +592,26 @@ have empty stdout and fixed safe stderr; signals exit 130/143, first signal wins
 Partial directories remain for inspection. Retry needs a new directory; crashes,
 SIGKILL and cleanup failures may leave unconfirmed output. See the
 [exact watch contract](docs/WATCH.md) for schemas, commit points, bounds and limits.
-Watch makes no stability, upgrade, event or reorg claims.
+Watch makes no upgrade, event or reorg claims.
+
+To label a changed observed state only after a local matching threshold, add
+`--stable-count N`, canonical decimal **1–16**. The first eligible saved snapshot
+is a baseline; a different state must match N eligible observations before a
+`stable` transition is recorded. A/B/A cancels the candidate. Count/duration and
+the 128-attempt cap still end the session without waiting for qualification.
+
+This option emits **session JSON v2** with a `stability` object; omitting it
+preserves v1. The policy compares target code/raw slots and, with
+`--implementation-code`, available implementation data under matching provenance.
+Unavailable implementation data is never unchanged. Repeated blocks add no
+matches; gaps, backwards heights and provenance breaks require a new baseline.
+Identity or contradictory block evidence invalidates policy decisions, while
+saved snapshots remain. Exit codes still describe capture outcomes.
+
+`stable` means only that the documented local threshold was met, not safety,
+an upgrade/event, ancestry, reorg detection or finality. See the
+[consecutive-observation contract](docs/STABILITY.md) for exact resets, invalidation,
+scope, report fields and finite resource limits.
 
 ## Observe a beacon implementation
 

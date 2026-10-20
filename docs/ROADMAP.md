@@ -26,7 +26,9 @@ Item 25 adds explicit live interruption, drain and owned-output rollback on 2026
 Item 26 adds explicit offline history, immutable indexing and interrupted-write recovery on 2026-10-15.
 Item 27 adds a read-only timeline of indexed observations on 2026-10-19.
 Item 28 adds deterministic retention previews and explicit copies with source backups on 2026-10-19.
-Items 29–45 have not started.
+Item 29 adds finite single-target watch sessions and per-observation commits on 2026-10-20.
+Item 30 adds opt-in consecutive-observation thresholds and explicit local validity rules on 2026-10-20.
+Items 31–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -293,10 +295,25 @@ There is no worker-owned scheduler or automatic endless backlog.
   No scheduler, history import/prune, stability or reorg policy. Completed
   2026-10-20.
 
+- [x] **30 — Consecutive observation policy.** Add CLI-only --stable-count 1–16
+  and explicit opt-in session JSON v2; default watch/report v1 remains unchanged.
+  Count only committed snapshots with exact target code/raw slots and, when
+  requested, available implementation data under matching provenance. Define
+  baseline/candidate/stable transitions, flapping resets and unmatched tails.
+  Repeated blocks add no matches; failed/stopped attempts, height gaps/order
+  and unavailable/provenance breaks cannot bridge a series. Incompatible saved
+  identity or contradictory block evidence invalidates the policy and prior
+  decisions without deleting observations or claiming reorg detection.
+  Preserve finite limits, capture/RPC/retry traces, signal/drain/ownership rules,
+  snapshots/config/history/diff and exits. Independent fixtures, deterministic
+  unit and loopback/CLI tests cover thresholds, identities, blocks, missing data,
+  commit failures, cancellation, resource bounds and compatibility. All 2014
+  tests, check, demo and changed-JS syntax checks pass. Document exact scope,
+  validity/report rules and local-only meaning of stable in STABILITY.md.
+  Completed 2026-10-20. No ancestry, finality, event or reorg policy.
+
 ## Planned increments
 
-- [ ] **30 — Consecutive observation policy.** Allow a configured number of
-  matching observations before marking a transition stable; test flapping.
 - [ ] **31 — Reorg-aware history.** Label displaced block observations and rebuild
   the visible timeline without deleting historical evidence.
 - [ ] **32 — EIP-1967 event cross-check.** Add bounded upgrade/admin/beacon log

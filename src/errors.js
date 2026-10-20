@@ -10,6 +10,8 @@ const messages = {
   WATCH_DIRECTORY: 'Cannot create the watch directory; use an existing trusted writable parent.',
   WATCH_CANCELLED: 'Watch stopped; committed observations were retained and unfinished output was removed.',
   WATCH_CLEANUP: 'Watch output cleanup or close was incomplete; inspect the retained directory and retry in a new directory.',
+  STABILITY_OPTION: 'Watch stable count must be a canonical decimal integer from 1 to 16.',
+  STABILITY_INPUT: 'Invalid committed-observation sequence for the bounded watch policy.',
   BATCH_TARGETS: 'Batch capture requires 1 to 32 unique, explicitly selected targets.',
   BATCH_EXISTS: 'Batch output destination already exists; choose a new directory.',
   BATCH_DIRECTORY: 'Cannot create the batch output directory; use an existing writable parent.',

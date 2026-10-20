@@ -3,8 +3,9 @@
 Added 2026-10-20. `watch` observes **one explicitly selected target** repeatedly
 through the existing strict capture engine. It runs in the foreground, with no
 system scheduler, background daemon, startup recovery, automatic history import,
-migration or pruning. It does not compare observations, mark them stable, label
-upgrades/reorgs, or infer intermediate events.
+migration or pruning. By default it does not compare observations. The opt-in
+[`--stable-count` policy](STABILITY.md) adds local threshold labels and session
+JSON v2; it never establishes upgrades/reorgs or intermediate events.
 
 ```sh
 # Choose your endpoint explicitly; this example is a local node.
@@ -31,6 +32,7 @@ existing trusted parent. It cannot append to or reuse a history/session director
 | `--count N` | Optional, canonical decimal 1–128 observation **attempts** |
 | `--duration-ms MS` | Optional, canonical decimal 100–600000 milliseconds |
 | `--out-dir NEW` | Required exclusive new private directory |
+| `--stable-count N` | Optional canonical decimal 1–16 local matching-state threshold; [separate contract](STABILITY.md) |
 
 At least one of count or duration is required. With both, the first reached
 limit stops the session. Even duration-only sessions have a **128-attempt hard
@@ -105,8 +107,10 @@ heads can produce different blocks; an explicit hash stays that same requested
 hash. All existing EIP-1898 pins, canonical/hash/number, initial/final chain and
 optional genesis rechecks remain. There is no selector, endpoint, expected-chain
 or unsupported-method fallback. Observations are independent: no additional
-cross-attempt ancestry/genesis/stability rule is inferred. Offline v4 diff still
-refuses different or unrecorded genesis.
+cross-attempt ancestry/genesis/stability rule is inferred by default. Opt-in
+stable-count checks saved identity and ordered state evidence locally, without
+new RPC or capture changes. Offline v4 diff still refuses different or unrecorded
+genesis.
 
 All response/header/code/snapshot caps and bounded beacon gas/call/time rules
 are unchanged. Per logical read, positive retries allow at most 1+R attempts
@@ -162,6 +166,10 @@ v2/v4, excluding filesystem overhead. Foreign writers are not subject to a disk
 quota. Cleanup failure stops immediately, preventing accumulation across retries.
 
 ## Session JSON v1 and exit policy
+
+This is the unchanged default report. Explicit `--stable-count` emits session
+v2 with these same fields/outcomes plus the bounded `stability` object described
+in [STABILITY.md](STABILITY.md). Exit and cancellation rules below stay the same.
 
 Normal count/duration/cap completion writes exactly one final JSON document to
 stdout, after all started work and timers have drained. Root fields:

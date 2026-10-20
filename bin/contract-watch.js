@@ -84,13 +84,18 @@ Watch options (one explicit target, no scheduler):
   --interval-ms MS   Required canonical decimal 100-60000; delay after capture/save/cleanup
   --count N          Canonical decimal 1-128 observation attempts, including failures
   --duration-ms MS   Canonical decimal 100-600000; monotonic session duration
+  --stable-count N   Opt-in local matching-state threshold 1-16; session JSON v2
 Count or duration is required; both stop at the first limit. Always at most 128 attempts.
 First attempt is immediate after validation/directory creation; no overlap or catch-up.
 Duration cancels active RPC/waits; drain file work and remove the unfinished observation.
 Completed observations survive later failures and SIGINT/SIGTERM (exit 130/143).
 Interrupt/global error: empty stdout, fixed safe stderr. Cleanup failure: WATCH_CLEANUP.
 Normal end: session JSON v1; exit 0 with saved observations and no failed/stopped attempts,
-otherwise 1. Retry requires a new directory; no history import/prune or stability claims.
+otherwise 1. Retry requires a new directory; no history import/prune.
+With --stable-count, only committed snapshots count; repeated blocks add no matches.
+Gaps/order/provenance breaks rebase; unavailable implementation is not unchanged.
+Identity/block conflicts invalidate policy decisions; they do not delete snapshots.
+Stable is a local observation label, not safety, an upgrade, ancestry or finality.
 Common single capture options apply; no --out, --concurrency or --shared-block.
 See docs/WATCH.md for commit points, partial output, crash and filesystem limits.
 
@@ -140,7 +145,7 @@ function parseSnapshot(args, many = false, watch = false) {
   const allowed = new Set([
     ...(many ? ['--out-dir', '--shared-block', '--concurrency']
       : ['--address', '--chain-id', '--rpc', ...(watch
-        ? ['--out-dir', '--interval-ms', '--count', '--duration-ms'] : ['--out'])]),
+        ? ['--out-dir', '--interval-ms', '--count', '--duration-ms', '--stable-count'] : ['--out'])]),
     '--block', '--block-hash', '--depth', '--timeout-ms', '--retries', '--deadline-ms',
     '--strict-checksum', '--resolve-beacon', '--implementation-code', '--genesis', '--config', '--target'
   ]);
@@ -306,6 +311,7 @@ async function main(args) {
     if (options['--timeout-ms'] !== undefined && !/^[1-9][0-9]*$/.test(options['--timeout-ms'])) fail('TIMEOUT_OPTION');
     return runWatch({
       intervalMs: options['--interval-ms'], count: options['--count'], durationMs: options['--duration-ms'],
+      stableCount: options['--stable-count'],
       outputDir: options['--out-dir'], configPath: options['--config'], name: options['--target'],
       options: { ...captureFlags(options), address: options['--address'], chainId: options['--chain-id'], rpcUrl: options['--rpc'] },
       includeBeacon: options['--resolve-beacon'] ?? false, includeImplementation: options['--implementation-code'] ?? false

@@ -8,6 +8,7 @@ import { captureInput, timeout, rpcUrl } from './validate.js';
 import { capture, captureWithBeacon, captureWithImplementation, saveSnapshot } from './snapshot.js';
 import { startCapture, capturePolicy } from './capture-policy.js';
 import { fail, errorDetails, publicError, WatchError } from './errors.js';
+import { createStabilityPolicy } from './stability.js';
 
 // Only the current observation is owned. The session directory is retained,
 // including when empty, and is used solely as a verified publication boundary.
@@ -43,6 +44,8 @@ export async function watchSession(settings, environment, signal, runtime = {}) 
   // Validate finite limits before config, env or any output access.
   const limits = watchLimits(settings);
   const { configPath, name, outputDir, options = {}, includeBeacon = false, includeImplementation = false } = settings;
+  const stability = settings.stableCount === undefined ? null
+    : createStabilityPolicy(settings.stableCount, { includeImplementation });
   if (typeof includeBeacon !== 'boolean' || typeof includeImplementation !== 'boolean' ||
       (includeBeacon && includeImplementation)) fail('USAGE');
   const check = () => checkCancellation(signal);
@@ -66,6 +69,7 @@ export async function watchSession(settings, environment, signal, runtime = {}) 
   const identity = captureInput(input);
   const { stopReason, outcomes } = await watchLoop(limits, async (ordinal, clock) => {
     const outputs = new WatchOutput(clock, entry);
+    let outcome, committedSnapshot;
     try {
       clock.check();
       await outputs.verify(entry.parent);
@@ -79,20 +83,27 @@ export async function watchSession(settings, environment, signal, runtime = {}) 
       const file = `observation-${String(ordinal).padStart(3, '0')}.json`;
       await saveSnapshot(join(directory, file), snapshot, outputs);
       await outputs.commit();
-      return { ordinal, status: 'saved', file, snapshotVersion: snapshot.schemaVersion, block: snapshot.block,
+      committedSnapshot = snapshot;
+      outcome = { ordinal, status: 'saved', file, snapshotVersion: snapshot.schemaVersion, block: snapshot.block,
         ...(beaconResolution ? { beaconResolution } : {}) };
     } catch (error) {
       if (!await outputs.rollback()) fail('WATCH_CLEANUP');
       if (error.code === 'WATCH_CLEANUP') throw error;
       clock.check();
-      return { ordinal, status: 'failed', error: errorDetails(error) };
+      outcome = { ordinal, status: 'failed', error: errorDetails(error) };
     }
+    // A policy error must never relabel an already committed file as failed.
+    // No policy evaluation or state retention at all when the option is absent.
+    stability?.observe(outcome, committedSnapshot);
+    return outcome;
   }, { ...runtime, signal });
+  if (outcomes.at(-1)?.status === 'stopped') stability?.observe(outcomes.at(-1));
   const saved = outcomes.filter(outcome => outcome.status === 'saved').length;
   const failed = outcomes.filter(outcome => outcome.status === 'failed').length;
-  return { kind: 'contract-watch-session', schemaVersion: 1, address: identity.target, chainId: identity.expected,
+  return { kind: 'contract-watch-session', schemaVersion: stability ? 2 : 1, address: identity.target, chainId: identity.expected,
     limits: { ...limits, maxAttempts: MAX_WATCH_ATTEMPTS }, stopReason,
-    attempted: outcomes.length, saved, failed, stopped: outcomes.length - saved - failed, outcomes };
+    attempted: outcomes.length, saved, failed, stopped: outcomes.length - saved - failed, outcomes,
+    ...(stability ? { stability: stability.report() } : {}) };
 }
 
 export async function runWatch(settings, environment = process.env, host = process, runtime = {}) {

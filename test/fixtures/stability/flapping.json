@@ -1,0 +1,22 @@
+{
+  "threshold": "2",
+  "states": ["A", "B", "A", "B", "B", "C", "C", "A", "A"],
+  "observations": [
+    {"ordinal":1,"status":"baseline","reason":"BASELINE","referenceOrdinal":1,"candidateOrdinal":null,"matches":0},
+    {"ordinal":2,"status":"candidate","reason":null,"referenceOrdinal":1,"candidateOrdinal":2,"matches":1},
+    {"ordinal":3,"status":"baseline-match","reason":null,"referenceOrdinal":1,"candidateOrdinal":null,"matches":0},
+    {"ordinal":4,"status":"candidate","reason":null,"referenceOrdinal":1,"candidateOrdinal":4,"matches":1},
+    {"ordinal":5,"status":"stable","reason":null,"referenceOrdinal":1,"candidateOrdinal":4,"matches":2},
+    {"ordinal":6,"status":"candidate","reason":null,"referenceOrdinal":5,"candidateOrdinal":6,"matches":1},
+    {"ordinal":7,"status":"stable","reason":null,"referenceOrdinal":5,"candidateOrdinal":6,"matches":2},
+    {"ordinal":8,"status":"candidate","reason":null,"referenceOrdinal":7,"candidateOrdinal":8,"matches":1},
+    {"ordinal":9,"status":"stable","reason":null,"referenceOrdinal":7,"candidateOrdinal":8,"matches":2}
+  ],
+  "transitions": [
+    {"status":"stable","fromOrdinal":1,"firstOrdinal":4,"confirmedOrdinal":5,"matches":2},
+    {"status":"stable","fromOrdinal":5,"firstOrdinal":6,"confirmedOrdinal":7,"matches":2},
+    {"status":"stable","fromOrdinal":7,"firstOrdinal":8,"confirmedOrdinal":9,"matches":2}
+  ],
+  "baselineOrdinal": 9,
+  "candidate": null
+}
