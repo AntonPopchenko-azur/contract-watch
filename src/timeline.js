@@ -17,7 +17,7 @@ const NOTICE_TEXT = {
   INCONSISTENT_BLOCK_DATA: 'The same recorded block hash has conflicting height, raw slots or recorded code/implementation details.'
 };
 
-function conflicting(a, b) {
+export function conflicting(a, b) {
   return a.block.number !== b.block.number || canonicalHistoryJson(a.code) !== canonicalHistoryJson(b.code) ||
     Object.keys(SLOTS).some(name => a.slots[name].raw !== b.slots[name].raw) ||
     (a.implementation && b.implementation && a.implementation.status !== 'not-recorded' &&
@@ -25,14 +25,18 @@ function conflicting(a, b) {
       canonicalHistoryJson(a.implementation) !== canonicalHistoryJson(b.implementation));
 }
 
+export function observationSummary(value, record) {
+  return { ordinal: record.ordinal, observationId: record.observationId,
+    capturedAt: value.capturedAt, block: value.block, code: codeDetails(value.code),
+    slots: Object.fromEntries(Object.keys(SLOTS).map(name => [name, slotDetails(value.slots[name])])),
+    implementation: value.schemaVersion === 1 ? null : implementationDetails(value.implementation) };
+}
+
 export async function historyTimeline(directory) {
   const observations = [], transitions = [], notices = [];
   let previous;
   const metadata = await visitCommittedHistory(directory, (value, record) => {
-    const current = { ordinal: record.ordinal, observationId: record.observationId,
-      capturedAt: value.capturedAt, block: value.block, code: codeDetails(value.code),
-      slots: Object.fromEntries(Object.keys(SLOTS).map(name => [name, slotDetails(value.slots[name])])),
-      implementation: value.schemaVersion === 1 ? null : implementationDetails(value.implementation) };
+    const current = observationSummary(value, record);
     const notice = (code, before) => notices.push({ code, beforeOrdinal: before.ordinal, afterOrdinal: current.ordinal });
     if (previous) {
       const pair = { from: current.ordinal - 1, to: current.ordinal };

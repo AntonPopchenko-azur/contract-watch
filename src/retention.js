@@ -16,9 +16,11 @@ const stat = path => lstat(path, { bigint: true });
 
 // Bind the plan to both verified bytes and this filesystem instance. Access
 // time is excluded so repeated read-only previews produce the same plan.
-async function checkpoint(root) {
+export async function historyCheckpoint(root, check = () => {}) {
+  check();
   const before = metadata(await checkRoot(root)), state = await loadHistory(root), files = [];
   for (const name of state.names) {
+    check();
     await checkRoot(root);
     const path = join(root.path, name), before = metadata(await stat(path));
     const bytes = await readBounded(path, limitFor(name)), after = metadata(await stat(path));
@@ -30,6 +32,8 @@ async function checkpoint(root) {
   if (!equal(before, metadata(await checkRoot(root))) || !equal(state.names, await historyNames(root))) fail('HISTORY_CHANGED');
   return { state, sourceState: digest(canonicalHistoryJson({ root: before, files })) };
 }
+
+const checkpoint = historyCheckpoint;
 
 // Pure selection over validated index metadata; exported for independent plan fixtures.
 export function retentionPlan(state, sourceState, keepLast) {

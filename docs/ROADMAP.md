@@ -28,7 +28,8 @@ Item 27 adds a read-only timeline of indexed observations on 2026-10-19.
 Item 28 adds deterministic retention previews and explicit copies with source backups on 2026-10-19.
 Item 29 adds finite single-target watch sessions and per-observation commits on 2026-10-20.
 Item 30 adds opt-in consecutive-observation thresholds and explicit local validity rules on 2026-10-20.
-Items 31–45 have not started.
+Item 31 adds bounded explicit source-relative history branch revalidation on 2026-11-14.
+Items 32–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -312,10 +313,21 @@ There is no worker-owned scheduler or automatic endless backlog.
   validity/report rules and local-only meaning of stable in STABILITY.md.
   Completed 2026-10-20. No ancestry, finality, event or reorg policy.
 
+- [x] **31 — Reorg-aware history.** Add explicit read-only `history revalidate`
+  with one endpoint, anchor hash and at most 128 linked headers. Require RPC v4
+  observed genesis; check chain/genesis/anchor before and after traversal. Label
+  source-relative displaced, matching and unknown observations without choosing
+  a branch from index order or hash differences alone. Recompute visible adjacent
+  comparisons, preserve contradictory/missing data and retention gaps, bind the
+  report to unchanged history bytes/metadata and retain all evidence. Independent
+  history fixtures and loopback tests cover forks/return, protocol limits/races,
+  exact budgets, identity, uint256, source preservation and cancellation. Offline
+  timeline v1/v2 and all snapshot/history formats remain unchanged. The versioned
+  stdout evidence contract and limits are documented in REVALIDATION.md.
+  Completed 2026-11-14. No event reads, persistent evidence store or background work.
+
 ## Planned increments
 
-- [ ] **31 — Reorg-aware history.** Label displaced block observations and rebuild
-  the visible timeline without deleting historical evidence.
 - [ ] **32 — EIP-1967 event cross-check.** Add bounded upgrade/admin/beacon log
   reads and label agreement or disagreement with storage observations.
 - [ ] **33 — Paginated log recovery.** Split bounded block ranges for providers

@@ -938,6 +938,39 @@ with JSON; failures exit 1 with empty stdout and fixed safe stderr. Signals use
 ordinary offline behavior. See the [retention contract](docs/HISTORY.md#explicit-retention-copy)
 for state binding, races, resource bounds and recovery.
 
+## Revalidate a bounded history branch
+
+For a history of RPC snapshot v4 observations with **recorded genesis**, explicitly
+select one RPC endpoint and one anchor hash to check its linked parent headers:
+
+```sh
+node bin/contract-watch.js history revalidate --dir ./history \
+  --rpc-env MY_RPC --anchor "$ANCHOR" --max-blocks 64
+```
+
+`MY_RPC` is an existing environment variable; `ANCHOR` must hold your explicitly
+chosen nonzero block hash. `--rpc URL` is an alternative to `--rpc-env ENV`.
+There is no default endpoint or latest discovery. `--max-blocks` is required,
+1–128 including the anchor. The command checks chain/genesis identity and the
+anchor before and after traversal, with no retries or state reads. Per-request
+timeout defaults to 10000 ms; the RPC sequence deadline defaults to 30000 ms.
+
+The separate JSON v1 branch report retains all observations, labeling them
+`on-branch`, `displaced` relative to this source's checked branch, or `unknown`.
+Only consistent matching observations enter the visible view; adjacent comparisons
+are recomputed in original index order. Unknown coverage, contradictory saved
+data, unavailable implementation observations and retention gaps stay explicit.
+Same-height hash differences alone never select a canonical branch. All history
+bytes, headers, index records and ordinary offline timeline JSON v1/v2 remain
+unchanged. No report file is written by the tool.
+
+Success means this bounded source check completed, even if observations are
+unknown/displaced. It is not finality, proof of a historical reorg or independent
+provider verification. Missing headers inside the requested window, RPC errors,
+identity/anchor races or changed history fail with empty stdout. See the full
+[revalidation/evidence contract](docs/REVALIDATION.md) for schemas, exact request
+budgets, cancellation and stdout delivery limits.
+
 ## Record genesis identity
 
 Add the valueless `--genesis` flag to save **snapshot v4** with the RPC's observed

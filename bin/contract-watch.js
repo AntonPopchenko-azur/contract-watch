@@ -12,6 +12,7 @@ import { captureMany } from '../src/batch.js';
 import { runLive } from '../src/cancellation.js';
 import { startCapture, capturePolicy } from '../src/capture-policy.js';
 import { runWatch } from '../src/watch.js';
+import { revalidateHistory } from '../src/revalidation.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
@@ -28,12 +29,13 @@ Usage:
   contract-watch history timeline --dir TARGET_DIR [--json]
   contract-watch history prune --dir TARGET_DIR --keep-last N
   contract-watch history prune --dir TARGET_DIR --keep-last N --apply PLAN_ID --out-dir NEW
+  contract-watch history revalidate --dir TARGET_DIR --anchor HASH --max-blocks N (--rpc URL | --rpc-env ENV) [--timeout-ms MS] [--deadline-ms MS]
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
   contract-watch migrate SOURCE.json --to-version 4 --out NEW.json
 
-History commands (offline):
+Offline history commands:
   init               Create a new private target directory; bind identity from SOURCE
   add                Copy one validated snapshot and append an immutable index entry
   verify             Validate all indexed/pending snapshots; no writes or network
@@ -52,6 +54,14 @@ Retention never deletes the source or reclaims disk space; pending/stages stay t
 Copies use history v2 with explicit original ordinals; timeline emits v2 for these copies.
 Changed source state invalidates the plan. No overwrite, automatic import or watch.
 See docs/HISTORY.md for partial-copy recovery and compatibility limits.
+
+Live history revalidation (explicit opt-in, read-only JSON report):
+  revalidate         Check up to 1-128 parent-linked headers from explicit anchor
+Requires RPC snapshot v4 history with observed genesis and one explicit endpoint.
+Only covered, consistent observations enter rebuilt comparisons; others stay in
+the report as displaced or unknown. No history writes, retries or implicit RPC.
+Timeout defaults to 10000 ms; RPC deadline to 30000 ms (100-600000).
+See docs/REVALIDATION.md for source-relative evidence and coverage limits.
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -259,6 +269,17 @@ function parsePrune(args) {
   return options;
 }
 
+function parseRevalidation(args) {
+  const options = {}, keys = { '--dir': 'directory', '--anchor': 'anchor', '--max-blocks': 'maxBlocks',
+    '--rpc': 'rpc', '--rpc-env': 'rpcEnv', '--timeout-ms': 'timeoutMs', '--deadline-ms': 'deadlineMs' };
+  for (let index = 0; index < args.length; index += 2) {
+    const key = Object.hasOwn(keys, args[index]) ? keys[args[index]] : undefined, value = args[index + 1];
+    if (!key || Object.hasOwn(options, key) || !value || value.startsWith('-')) fail('USAGE');
+    options[key] = value;
+  }
+  return options;
+}
+
 async function main(args) {
   if (args.length === 0 || (args.length === 1 && ['--help', '-h'].includes(args[0]))) {
     process.stdout.write(HELP); return;
@@ -267,6 +288,11 @@ async function main(args) {
     process.stdout.write('0.1.0\n'); return;
   }
   if (args[0] === 'history') {
+    if (args[1] === 'revalidate') {
+      const options = parseRevalidation(args.slice(2));
+      await runLive(async operation => ({ stdout: `${JSON.stringify(await revalidateHistory(options, process.env, operation), null, 2)}\n` }));
+      return;
+    }
     if (args[1] === 'prune') {
       const result = await pruneHistory(parsePrune(args.slice(2)));
       process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

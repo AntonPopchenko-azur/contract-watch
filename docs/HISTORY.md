@@ -1,14 +1,18 @@
 # Explicit local history (versions 1 and 2)
 
 Added 2026-10-15. History is an offline store of explicitly selected saved
-snapshots, separate from live capture. It does not read RPC/config environment
+snapshots, separate from live capture. Init/add/verify/recover/timeline/prune do not read RPC/config environment
 variables, connect to a provider, migrate a snapshot, discover target folders,
 import neighboring files or infer missing observations. Read-only timeline was
 added 2026-10-19, followed by explicit retention preview/copy the same day.
 Finite [`watch`](WATCH.md) sessions were added 2026-10-20 as separate new
 directories of ordinary snapshots; they never append/import into a history.
-Explicit history init/add can reuse selected watch snapshots. Stability and
-reorg analysis remain separate roadmap items.
+Explicit history init/add can reuse selected watch snapshots. Watch's opt-in
+stability policy is documented separately in [STABILITY.md](STABILITY.md).
+Added 2026-11-14, explicit live [`history revalidate`](REVALIDATION.md) checks a
+bounded parent-linked range from a caller-selected RPC and anchor hash. It emits
+a separate source-relative branch report with on-branch/displaced/unknown labels
+and rebuilt comparisons, retaining all source files and raw timeline v1/v2.
 
 ## Commands and identity
 
@@ -527,7 +531,7 @@ checks are separate syscalls, not atomic conditional unlink/open-by-directory-FD
 operations. They detect stable replacements but do not promise safety against
 hostile path swaps, inode reuse or forged metadata during race windows.
 
-History commands use normal offline process signal behavior; they do not install
+The offline history commands described here use normal process signal behavior; they do not install
 live capture's cancellation handlers or rollback already published history.
 SIGINT/SIGTERM/SIGKILL/crashes may leave stages, pending snapshots or a committed
 entry without its report. Recovery above is designed for these process-stop
