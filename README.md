@@ -971,6 +971,39 @@ identity/anchor races or changed history fail with empty stdout. See the full
 [revalidation/evidence contract](docs/REVALIDATION.md) for schemas, exact request
 budgets, cancellation and stdout delivery limits.
 
+## Cross-check EIP-1967 events at one block
+
+Explicitly compare the last returned `Upgraded`, `AdminChanged` and
+`BeaconUpgraded` values with the corresponding proxy slots at one pinned block:
+
+```sh
+node bin/contract-watch.js events --address "$TARGET" --chain-id "$CHAIN_ID" \
+  --genesis-hash "$GENESIS_HASH" --block-hash "$BLOCK_HASH" --rpc-env MY_RPC
+```
+
+Supply the target, expected chain/genesis, chosen nonzero block hash and one
+existing RPC environment variable (`--rpc URL` is an alternative). No default
+endpoint or latest lookup is used. The command reads three hash-pinned raw slots,
+one hash-filtered log response and before/after identity/block checks: exactly
+**11 requests**, one block, at most **256 logs** and **4096 transactions**, no
+retry, pagination, code read or history import. Defaults are 10000 ms per request
+and a 30000 ms overall deadline; both are explicitly configurable.
+
+The separate JSON v1 report preserves raw words, all returned valid event
+provenance and deterministic log order. Per slot it reports `agreement`,
+`disagreement` or `unavailable`. Only the last returned event is compared to final
+storage; earlier values and admin sequence gaps remain visible. Empty logs do
+not mean unchanged storage or complete evidence. BeaconUpgraded concerns this
+proxy's beacon slot, not an implementation change inside the beacon.
+
+All claims remain relative to one source; completeness, consensus, finality and
+contract safety are unverified. Malformed, removed, misbound or contradictory
+logs, RPC/limit errors and identity/block races fail with empty stdout. Exit 0
+means the check completed, even with disagreement/unavailable results. No files
+are read or written; existing snapshots/history/watch/report formats remain
+unchanged. See the [event protocol and report contract](docs/EVENTS.md) for ABI,
+strict validation, budgets, cancellation and output-delivery limits.
+
 ## Record genesis identity
 
 Add the valueless `--genesis` flag to save **snapshot v4** with the RPC's observed
@@ -1064,8 +1097,9 @@ check and initial head lookup (two requests, or three with genesis). Local file 
 RPC timeout budget. Block lookups request transaction hashes only,
 not full transaction objects; the same 1 MiB response limit applies to them.
 The generic RPC allowlist contains only chain, block, code, and storage reads.
-A dedicated operation permits only the fixed beacon call above. No arbitrary
-calls, wallet, signing or transaction submission are exposed.
+Dedicated operations permit the fixed beacon call above and the bounded
+single-block EIP-1967 log query used by `events`. No arbitrary calls, wallet,
+signing or transaction submission are exposed.
 
 ## Interpretation and limits
 

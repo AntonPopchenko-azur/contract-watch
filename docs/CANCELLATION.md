@@ -8,10 +8,15 @@ WATCH_CLEANUP errors, the same first-signal 130/143 policy, and empty stdout on
 interrupt. Its duration also cancels/drains active work. See WATCH.md for the
 separate commit and partial-output contract.
 
+The separate live [`history revalidate`](REVALIDATION.md) and [`events`](EVENTS.md)
+reports use the same first-signal, abort/drain and final stdout boundary with no
+owned files. Their offline source/history behavior and distinct protocol budgets
+are documented on those pages; normal offline history commands remain unaffected.
+
 Implemented 2026-10-12 for `snapshot` and `snapshot-many`. There are no new
 flags, config fields, snapshot/report versions, watch loop or provider-wide
 queue in this lifecycle. Offline inspect, diff, migrate and the separate
-[history commands](HISTORY.md) do not install these signal handlers. History
+[offline history commands](HISTORY.md) do not install these signal handlers. History
 uses explicit interrupted-publication recovery, not live-output rollback.
 
 ## Lifetime and completion point

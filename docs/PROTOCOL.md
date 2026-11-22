@@ -1,5 +1,10 @@
 # Protocol and snapshot formats
 
+The explicit [`events` command](EVENTS.md), added 2026-11-22, uses a separate
+versioned read-only report and a single-block protocol with fixed EIP-1967 log
+signatures. Its stricter event/transaction validation and bounded log method do
+not change the capture/snapshot protocols below or permit generic arbitrary RPC.
+
 ## Local target selection
 
 `snapshot --config FILE --target NAME --out NEW` resolves exactly one definition

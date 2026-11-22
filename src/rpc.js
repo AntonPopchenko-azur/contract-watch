@@ -4,13 +4,15 @@ import { WatchError, fail } from './errors.js';
 import { rpcUrl, timeout, address, blockHash } from './validate.js';
 import { BEACON_SELECTOR, BEACON_GAS, MAX_BEACON_RESPONSE_BYTES, MAX_BEACON_TIMEOUT_MS } from './beacon.js';
 import { createCapturePolicy } from './capture-policy.js';
+import { EVENTS, MAX_EVENT_RESPONSE_BYTES } from './event-logs.js';
+import { parseStrictJson } from './strict-json.js';
 
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
 const READ_METHODS = new Set([
   'eth_chainId', 'eth_getBlockByNumber', 'eth_getBlockByHash', 'eth_getCode', 'eth_getStorageAt'
 ]);
 
-export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePolicy()) {
+export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePolicy(), { strictJson = false } = {}) {
   const url = rpcUrl(endpoint);
   timeout(String(timeoutMs));
   let nextId = 0;
@@ -24,7 +26,7 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
   }
 
   async function attemptRpc(method, encodedParams, maxBytes, requestTimeout, deadlineLimited) {
-    const sizeCode = method === 'eth_call' ? 'BEACON_SIZE' : 'RPC_SIZE';
+    const sizeCode = method === 'eth_call' ? 'BEACON_SIZE' : method === 'eth_getLogs' ? 'EVENT_SIZE' : 'RPC_SIZE';
     const id = policy.nextId ? policy.nextId() : ++nextId;
     const payload = `{"jsonrpc":"2.0","id":${id},"method":${JSON.stringify(method)},"params":${encodedParams}}`;
     return new Promise((resolve, reject) => {
@@ -91,7 +93,9 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
           response.on('end', () => {
             if (settled) return;
             try {
-              const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+              const bytes = Buffer.concat(chunks);
+              const body = strictJson || method === 'eth_getLogs'
+                ? parseStrictJson(bytes, 'RPC_ENVELOPE') : JSON.parse(bytes.toString('utf8'));
               if (!body || typeof body !== 'object' || Array.isArray(body) ||
                   body.jsonrpc !== '2.0' || body.id !== id ||
                   Object.hasOwn(body, 'result') === Object.hasOwn(body, 'error')) {
@@ -124,5 +128,10 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
     { from: address(target), to: address(beacon), gas: BEACON_GAS, value: '0x0', input: BEACON_SELECTOR },
     { blockHash: blockHash(hash), requireCanonical: true }
   ], MAX_BEACON_RESPONSE_BYTES, Math.min(timeoutMs, MAX_BEACON_TIMEOUT_MS));
+  // eth_getLogs is deliberately absent from the generic allowlist. One target,
+  // one explicit block hash, and only these three EIP-1967 signatures.
+  rpc.eip1967Logs = async (target, hash) => requestRpc('eth_getLogs', [{
+    address: address(target), blockHash: blockHash(hash), topics: [EVENTS.map(event => event.topic)]
+  }], MAX_EVENT_RESPONSE_BYTES);
   return rpc;
 }

@@ -29,7 +29,8 @@ Item 28 adds deterministic retention previews and explicit copies with source ba
 Item 29 adds finite single-target watch sessions and per-observation commits on 2026-10-20.
 Item 30 adds opt-in consecutive-observation thresholds and explicit local validity rules on 2026-10-20.
 Item 31 adds bounded explicit source-relative history branch revalidation on 2026-11-14.
-Items 32–45 have not started.
+Item 32 adds explicit single-block EIP-1967 event/storage cross-checks on 2026-11-22.
+Items 33–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -326,10 +327,23 @@ There is no worker-owned scheduler or automatic endless backlog.
   stdout evidence contract and limits are documented in REVALIDATION.md.
   Completed 2026-11-14. No event reads, persistent evidence store or background work.
 
+- [x] **32 — EIP-1967 event cross-check.** Add explicit `events` for one target,
+  expected chain/genesis and selected block hash on one RPC. Read three pinned
+  raw slots and one fixed-signature log query with before/after identity/block
+  checks: exactly 11 requests, at most 256 logs and 4096 transactions. Strict ABI,
+  mined provenance, transaction membership/order and JSON validation refuse
+  malformed or contradictory evidence. Compare only each slot's last returned
+  event with end-of-block storage; preserve earlier events, unavailable/absent
+  evidence, admin sequence gaps and noncanonical words. BeaconUpgraded refers
+  only to the proxy beacon slot. Separate JSON v1 stdout and documented source/
+  completeness limits leave all existing snapshot/history/watch formats intact.
+  Independent fixtures and unit/loopback/CLI tests cover all ABI events, returns,
+  limits, uint256, races, redaction, cancellation and source preservation. All
+  2252 tests pass; document protocol, report and delivery contracts in EVENTS.md.
+  Completed 2026-11-22. No pagination, historical correlation or background work.
+
 ## Planned increments
 
-- [ ] **32 — EIP-1967 event cross-check.** Add bounded upgrade/admin/beacon log
-  reads and label agreement or disagreement with storage observations.
 - [ ] **33 — Paginated log recovery.** Split bounded block ranges for providers
   with log limits and test gaps, duplicates and interrupted pagination.
 - [ ] **34 — Event-to-snapshot correlation.** Link candidate events to nearby

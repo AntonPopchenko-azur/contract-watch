@@ -13,6 +13,7 @@ import { runLive } from '../src/cancellation.js';
 import { startCapture, capturePolicy } from '../src/capture-policy.js';
 import { runWatch } from '../src/watch.js';
 import { revalidateHistory } from '../src/revalidation.js';
+import { crossCheckEvents, eventCheckJson } from '../src/event-check.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
@@ -30,6 +31,7 @@ Usage:
   contract-watch history prune --dir TARGET_DIR --keep-last N
   contract-watch history prune --dir TARGET_DIR --keep-last N --apply PLAN_ID --out-dir NEW
   contract-watch history revalidate --dir TARGET_DIR --anchor HASH --max-blocks N (--rpc URL | --rpc-env ENV) [--timeout-ms MS] [--deadline-ms MS]
+  contract-watch events --address ADDRESS --chain-id ID --genesis-hash HASH --block-hash HASH (--rpc URL | --rpc-env ENV) [--timeout-ms MS] [--deadline-ms MS]
   contract-watch inspect FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
@@ -62,6 +64,16 @@ Only covered, consistent observations enter rebuilt comparisons; others stay in
 the report as displaced or unknown. No history writes, retries or implicit RPC.
 Timeout defaults to 10000 ms; RPC deadline to 30000 ms (100-600000).
 See docs/REVALIDATION.md for source-relative evidence and coverage limits.
+
+Event cross-check (explicit live read, separate JSON v1 stdout):
+  events             Compare the last returned Upgraded/AdminChanged/BeaconUpgraded
+                     per slot with hash-pinned end-of-block raw storage
+One block, at most 256 logs/4096 transactions, exactly 11 successful RPC requests.
+Explicit expected chain/genesis/block and endpoint; no default RPC or latest.
+No pagination, retry, saved files, or beacon implementation inference.
+Timeout 100-60000 ms (default 10000); deadline 100-600000 (default 30000).
+Agreement/disagreement/unavailable are per slot; absent events prove no absence
+of changes. See docs/EVENTS.md for evidence, validation and delivery limits.
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -286,6 +298,17 @@ async function main(args) {
   }
   if (args.length === 1 && args[0] === '--version') {
     process.stdout.write('0.1.0\n'); return;
+  }
+  if (args[0] === 'events') {
+    const options = {}, keys = { '--address': 'address', '--chain-id': 'chainId', '--genesis-hash': 'genesisHash',
+      '--block-hash': 'blockHash', '--rpc': 'rpc', '--rpc-env': 'rpcEnv', '--timeout-ms': 'timeoutMs', '--deadline-ms': 'deadlineMs' };
+    for (let index = 1; index < args.length; index += 2) {
+      const key = Object.hasOwn(keys, args[index]) ? keys[args[index]] : undefined, value = args[index + 1];
+      if (!key || Object.hasOwn(options, key) || !value || value.startsWith('-')) fail('USAGE');
+      options[key] = value;
+    }
+    await runLive(async operation => ({ stdout: eventCheckJson(await crossCheckEvents(options, process.env, operation)) }));
+    return;
   }
   if (args[0] === 'history') {
     if (args[1] === 'revalidate') {
