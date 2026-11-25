@@ -1004,6 +1004,39 @@ are read or written; existing snapshots/history/watch/report formats remain
 unchanged. See the [event protocol and report contract](docs/EVENTS.md) for ABI,
 strict validation, budgets, cancellation and output-delivery limits.
 
+## Recover logs over an explicit range
+
+Collect EIP-1967 events over **1–32 inclusive blocks**, bound to a chosen upper
+block hash and expected chain/genesis:
+
+```sh
+node bin/contract-watch.js events-range --address "$TARGET" --chain-id "$CHAIN_ID" \
+  --genesis-hash "$GENESIS_HASH" --from-block 100 --to-block 103 \
+  --to-hash "$BLOCK_103_HASH" --rpc-env MY_RPC
+```
+
+Both heights are canonical decimal uint256 values. Supply exactly one endpoint
+via `--rpc-env ENV` or `--rpc URL`; no latest lookup or default endpoint is used.
+The command binds linked headers, checks the upper anchor around each log query,
+then rechecks every covered block, genesis and chain. Only a well-formed RPC
+limit error **-32005** permits deterministic left-first subdivision. HTTP errors,
+timeouts, malformed results and local limits fail without retry or fallback.
+Identical valid records are deduplicated; contradictions and out-of-page records
+fail. Empty leaves remain explicit, and filtered global log-index gaps are valid.
+
+The separate JSON v1 report exits **0** for complete checked coverage, or **1**
+with an incomplete coverage journal and **no partial logs** after protocol
+failure. Provider log completeness remains unverified even on success.
+SIGINT/SIGTERM retain empty stdout and 130/143. No files, storage, snapshots or
+history are read or written; existing single-block `events` remains unchanged.
+
+Limits are 63 log attempts (lower with `--max-pages`), 258 total requests, 16 MiB
+aggregate response bodies, 256 logs per response, 1024 received entries including
+duplicates, 512 unique logs and 4096 transaction hashes across the range. Defaults
+are 10000 ms per request and a 30000 ms deadline. No resumable checkpoint is
+created: an explicit rerun starts from the original inputs. See the [range
+protocol, coverage journal and limits](docs/EVENT-RANGES.md) before automating.
+
 ## Record genesis identity
 
 Add the valueless `--genesis` flag to save **snapshot v4** with the RPC's observed
@@ -1098,7 +1131,8 @@ RPC timeout budget. Block lookups request transaction hashes only,
 not full transaction objects; the same 1 MiB response limit applies to them.
 The generic RPC allowlist contains only chain, block, code, and storage reads.
 Dedicated operations permit the fixed beacon call above and the bounded
-single-block EIP-1967 log query used by `events`. No arbitrary calls, wallet,
+single-block EIP-1967 log query used by `events`, and the separately bounded fixed
+event range query used by `events-range`. No arbitrary calls, wallet,
 signing or transaction submission are exposed.
 
 ## Interpretation and limits

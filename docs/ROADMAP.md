@@ -30,7 +30,8 @@ Item 29 adds finite single-target watch sessions and per-observation commits on 
 Item 30 adds opt-in consecutive-observation thresholds and explicit local validity rules on 2026-10-20.
 Item 31 adds bounded explicit source-relative history branch revalidation on 2026-11-14.
 Item 32 adds explicit single-block EIP-1967 event/storage cross-checks on 2026-11-22.
-Items 33–45 have not started.
+Item 33 adds bounded explicit EIP-1967 log recovery with a coverage journal on 2026-11-25.
+Items 34–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -342,10 +343,27 @@ There is no worker-owned scheduler or automatic endless backlog.
   2252 tests pass; document protocol, report and delivery contracts in EVENTS.md.
   Completed 2026-11-22. No pagination, historical correlation or background work.
 
+- [x] **33 — Paginated log recovery.** Add explicit `events-range` for 1–32
+  inclusive blocks bound to an upper hash and expected chain/genesis. Traverse
+  linked headers, check the anchor around each fixed-signature log attempt and
+  recheck every covered block and identity before success. Only valid -32005
+  errors permit deterministic left-first subdivision: at most 63 attempts,
+  depth 5, 258 total RPCs, 16 MiB aggregate response bodies, 1024 received/512
+  unique logs and 4096 aggregate transaction hashes. Strict mined ABI/provenance
+  validation deduplicates identical admissible records and rejects contradictory
+  or out-of-page data. Separate JSON v1 retains empty/unread/failed coverage;
+  incomplete reports exit 1 without partial logs. Signals drain with empty
+  stdout and first-signal 130/143. Independent fixtures and unit/loopback/CLI
+  tests cover boundaries, gaps, duplicates, caps, races, explicit restart,
+  cancellation, redaction and source preservation. All 2365 tests pass in both
+  npm test and npm run check; demo and changed-JS syntax checks pass. Document
+  protocol, journal, resource and recovery contracts in EVENT-RANGES.md.
+  Completed 2026-11-25. Single-block events/report v1/11-request behavior and all
+  snapshot/history/revalidation/watch contracts remain intact. No storage or
+  historical correlation, durable checkpoint, scheduler or background work.
+
 ## Planned increments
 
-- [ ] **33 — Paginated log recovery.** Split bounded block ranges for providers
-  with log limits and test gaps, duplicates and interrupted pagination.
 - [ ] **34 — Event-to-snapshot correlation.** Link candidate events to nearby
   observations while retaining transaction/block provenance and caveats.
 - [ ] **35 — EIP-1167 minimal proxy evidence.** Add narrowly specified bytecode

@@ -6,6 +6,10 @@ with that slot's hash-pinned end-of-block value. It reads no saved snapshots,
 history, configuration or neighboring blocks and creates no files. Snapshot
 v1–v4, diff, timeline v1/v2, revalidation, watch and stored history are unchanged.
 
+The separate [`events-range`](EVENT-RANGES.md) command (2026-11-25) adds explicit
+bounded range collection and a coverage journal without storage comparison.
+It does not enable pagination or change errors/reports for `events` below.
+
 ```sh
 # Existing caller-provided values: an explicit target, expected chain ID,
 # expected genesis hash, selected block hash and an RPC environment variable.

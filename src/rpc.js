@@ -6,26 +6,28 @@ import { BEACON_SELECTOR, BEACON_GAS, MAX_BEACON_RESPONSE_BYTES, MAX_BEACON_TIME
 import { createCapturePolicy } from './capture-policy.js';
 import { EVENTS, MAX_EVENT_RESPONSE_BYTES } from './event-logs.js';
 import { parseStrictJson } from './strict-json.js';
+import { rangeBounds } from './event-range-policy.js';
 
 export const MAX_RESPONSE_BYTES = 1024 * 1024;
 const READ_METHODS = new Set([
   'eth_chainId', 'eth_getBlockByNumber', 'eth_getBlockByHash', 'eth_getCode', 'eth_getStorageAt'
 ]);
 
-export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePolicy(), { strictJson = false } = {}) {
+export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePolicy(), { strictJson = false, budget } = {}) {
   const url = rpcUrl(endpoint);
   timeout(String(timeoutMs));
   let nextId = 0;
   const transient = new WeakMap();
 
-  async function requestRpc(method, params, maxBytes = MAX_RESPONSE_BYTES, requestTimeout = timeoutMs) {
+  async function requestRpc(method, params, maxBytes = MAX_RESPONSE_BYTES, requestTimeout = timeoutMs, rangeLimit = false) {
     // Serialize params once; retries cannot mutate the logical read or selector.
     const encodedParams = JSON.stringify(params);
-    return policy.read((limit, deadlineLimited) => attemptRpc(method, encodedParams, maxBytes, limit, deadlineLimited),
+    return policy.read((limit, deadlineLimited) => attemptRpc(method, encodedParams, maxBytes, limit, deadlineLimited, rangeLimit),
       requestTimeout, error => transient.get(error));
   }
 
-  async function attemptRpc(method, encodedParams, maxBytes, requestTimeout, deadlineLimited) {
+  async function attemptRpc(method, encodedParams, maxBytes, requestTimeout, deadlineLimited, rangeLimit) {
+    budget?.beforeRequest(method);
     const sizeCode = method === 'eth_call' ? 'BEACON_SIZE' : method === 'eth_getLogs' ? 'EVENT_SIZE' : 'RPC_SIZE';
     const id = policy.nextId ? policy.nextId() : ++nextId;
     const payload = `{"jsonrpc":"2.0","id":${id},"method":${JSON.stringify(method)},"params":${encodedParams}}`;
@@ -84,6 +86,9 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
           let size = 0;
           const chunks = [];
           response.on('data', chunk => {
+            if (settled) return;
+            try { budget?.receiveBytes(chunk.length); }
+            catch (error) { finish(error); response.destroy(); return; }
             size += chunk.length;
             if (size > maxBytes) { stop(sizeCode); response.destroy(); return; }
             chunks.push(chunk);
@@ -101,7 +106,17 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
                   Object.hasOwn(body, 'result') === Object.hasOwn(body, 'error')) {
                 stop('RPC_ENVELOPE'); return;
               }
-              if (Object.hasOwn(body, 'error')) { stop('RPC_REMOTE'); return; }
+              if (Object.hasOwn(body, 'error')) {
+                if (rangeLimit) {
+                  const e = body.error;
+                  if (!e || typeof e !== 'object' || Array.isArray(e) || !Number.isSafeInteger(e.code) ||
+                      typeof e.message !== 'string' || Object.keys(e).some(k => !['code', 'message', 'data'].includes(k))) {
+                    stop('RPC_ENVELOPE'); return;
+                  }
+                  if (e.code === -32005) { stop('RANGE_PROVIDER_LIMIT', false); return; }
+                }
+                stop('RPC_REMOTE'); return;
+              }
               finish(null, body.result);
             } catch { stop('RPC_ENVELOPE'); }
           });
@@ -133,5 +148,12 @@ export function createRpc(endpoint, timeoutMs = 10000, policy = createCapturePol
   rpc.eip1967Logs = async (target, hash) => requestRpc('eth_getLogs', [{
     address: address(target), blockHash: blockHash(hash), topics: [EVENTS.map(event => event.topic)]
   }], MAX_EVENT_RESPONSE_BYTES);
+  // Separate explicit bounded range operation. Only its validated -32005 code
+  // can request subdivision; single-block events retains RPC_REMOTE unchanged.
+  rpc.eip1967RangeLogs = async (target, fromBlock, toBlock) => {
+    rangeBounds(fromBlock, toBlock, true);
+    return requestRpc('eth_getLogs', [{ address: address(target), fromBlock, toBlock,
+      topics: [EVENTS.map(event => event.topic)] }], MAX_EVENT_RESPONSE_BYTES, timeoutMs, true);
+  };
   return rpc;
 }

@@ -4,6 +4,9 @@ The explicit [`events` command](EVENTS.md), added 2026-11-22, uses a separate
 versioned read-only report and a single-block protocol with fixed EIP-1967 log
 signatures. Its stricter event/transaction validation and bounded log method do
 not change the capture/snapshot protocols below or permit generic arbitrary RPC.
+The separate [`events-range` command](EVENT-RANGES.md), added 2026-11-25, binds
+1–32 blocks with finite coded-limit subdivision and a distinct coverage journal.
+It does not change the single-block event report or correlate with snapshots.
 
 ## Local target selection
 

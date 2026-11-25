@@ -44,6 +44,7 @@ function selectedBlock(value) {
   if (block.transactions.includes(ZERO_WORD) || new Set(block.transactions).size !== block.transactions.length) fail('EVENT_BLOCK');
   return block;
 }
+export { selectedBlock as validateEventBlock };
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function blockEvidence(block) {
   const { transactions, ...header } = block;
