@@ -16,6 +16,7 @@ import { revalidateHistory } from '../src/revalidation.js';
 import { crossCheckEvents, eventCheckJson } from '../src/event-check.js';
 import { readEventRange, eventRangeJson } from '../src/event-range.js';
 import { correlateHistory, correlationJson } from '../src/correlation.js';
+import { analyzeMinimalProxy, minimalProxyJson } from '../src/minimal-proxy.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
@@ -37,6 +38,7 @@ Usage:
   contract-watch events --address ADDRESS --chain-id ID --genesis-hash HASH --block-hash HASH (--rpc URL | --rpc-env ENV) [--timeout-ms MS] [--deadline-ms MS]
   contract-watch events-range --address ADDRESS --chain-id ID --genesis-hash HASH --from-block N --to-block N --to-hash HASH (--rpc URL | --rpc-env ENV) [--max-pages N] [--timeout-ms MS] [--deadline-ms MS]
   contract-watch inspect FILE
+  contract-watch minimal-proxy FILE
   contract-watch diff [--json] [--exit-code] BEFORE.json AFTER.json
   contract-watch migrate SOURCE.json --to-version 3 --out NEW.json
   contract-watch migrate SOURCE.json --to-version 4 --out NEW.json
@@ -91,6 +93,11 @@ Offline event correlation (separate JSON v1):
 Nearest matching-header snapshots: before height < event, after height >= event.
 All ties retained; value comparisons are candidate-only, never proof of causation.
 No RPC/env lookup or writes. See docs/CORRELATION.md for identity and source limits.
+
+Minimal proxy evidence (separate offline JSON v1):
+  minimal-proxy FILE  Match saved target code to the exact 45-byte EIP-1167 runtime
+Empty code, matched and no-supported-match are distinct; unknown variants stay unknown.
+Extract bytes 10-29 without target fetch or traversal. See docs/MINIMAL-PROXY.md.
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -425,6 +432,11 @@ async function main(args) {
     if (args.length !== 2 || !args[1] || args[1].startsWith('-')) fail('USAGE');
     const snapshot = await readSnapshot(args[1]);
     process.stdout.write(`${snapshotReport(snapshot)}\n`);
+    return;
+  }
+  if (args[0] === 'minimal-proxy') {
+    if (args.length !== 2 || !args[1] || args[1].startsWith('-')) fail('USAGE');
+    process.stdout.write(minimalProxyJson(await analyzeMinimalProxy(args[1])));
     return;
   }
   fail('USAGE');

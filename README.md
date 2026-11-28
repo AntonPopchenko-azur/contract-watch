@@ -63,6 +63,34 @@ parsing is performed. Snapshot/diff options
 such as `--rpc`, `--json` and `--exit-code` are rejected; for a filename starting
 with `-`, use a path such as `./-snapshot.json`.
 
+## Inspect exact minimal-proxy bytecode
+
+Analyze the target code in one saved snapshot v1–v4, entirely offline:
+
+```sh
+node bin/contract-watch.js minimal-proxy ./snapshot.json
+```
+
+The separate JSON v1 report recognizes only the exact **45-byte deployed runtime**
+specified by [EIP-1167](https://eips.ethereum.org/EIPS/eip-1167#specification).
+It extracts all 20 address bytes at indices **10–29**, retaining leading zeros,
+and binds evidence to the snapshot source/version, target, chain, block and
+recorded or unknown genesis. The separate saved implementation code is not analyzed.
+
+Outcomes distinguish `empty-code`, `matched` and `no-supported-match`. Zero and
+self targets retain explicit flags with availability/behavior unverified. A
+nonmatch does not establish that the code is not a proxy: vanity PUSHn, PUSH0,
+creation code, appended data and other variants are outside this narrow matcher.
+Byte agreement is not proof of target availability, behavior, finality, upgrade
+or safety. No target fetch, execution or recursive traversal occurs.
+
+Success exits 0 for every valid outcome; errors exit 1 with empty stdout and safe
+stderr. Strict UTF-8 JSON, duplicate-key rejection, existing snapshot/code caps and
+regular-file checks apply. The report is limited to 8 KiB. No network, environment
+discovery, migration or file writes occur; prior inspect/diff output is unchanged.
+See the [matching, provenance and file contract](docs/MINIMAL-PROXY.md) and
+[independent fixtures](test/fixtures/minimal-proxy/README.md).
+
 ## Capture a snapshot
 
 Supply the exact target address, expected chain ID, and your chosen HTTP(S) RPC.

@@ -1,5 +1,10 @@
 # Protocol and snapshot formats
 
+The separate offline [`minimal-proxy FILE`](MINIMAL-PROXY.md) command, added
+2026-11-28, examines saved target code for one exact EIP-1167 deployed-runtime
+shape and emits evidence JSON v1. It leaves the snapshot and existing report
+schemas below unchanged, without target resolution or proxy-path traversal.
+
 The explicit [`events` command](EVENTS.md), added 2026-11-22, uses a separate
 versioned read-only report and a single-block protocol with fixed EIP-1967 log
 signatures. Its stricter event/transaction validation and bounded log method do

@@ -85,6 +85,8 @@ const messages = {
   CORRELATION_IDENTITY: 'Correlation requires matching target, chain and recorded genesis in RPC snapshot v4 history.',
   CORRELATION_CHANGED: 'The selected event report changed while being read; rerun with stable inputs.',
   CORRELATION_SIZE: 'Event correlation report exceeded the 4 MiB output limit.',
+  MINIMAL_PROXY_INPUT: 'Minimal proxy analysis requires a bounded regular file containing a strict UTF-8 snapshot v1-v4.',
+  MINIMAL_PROXY_REPORT: 'Minimal proxy evidence exceeded the 8 KiB report limit.',
   RETENTION_KEEP: 'Retention requires --keep-last as a canonical decimal integer from 0 to 128; the first baseline is always kept.',
   RETENTION_PLAN: 'Retention plan does not match the verified source state and policy; preview again before applying.',
   RETENTION_DESTINATION: 'Retention requires a new output directory outside the source history in an existing trusted parent.',

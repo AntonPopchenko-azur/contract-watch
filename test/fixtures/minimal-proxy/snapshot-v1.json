@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "source": "synthetic",
+  "capturedAt": "2026-11-28T17:00:00.000Z",
+  "chainId": "1",
+  "address": "0x1111111111111111111111111111111111111111",
+  "block": {
+    "number": "0x64",
+    "hash": "0xabababababababababababababababababababababababababababababababab"
+  },
+  "code": "0x363d3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5bf3",
+  "slots": {
+    "implementation": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "admin": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "beacon": "0x0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

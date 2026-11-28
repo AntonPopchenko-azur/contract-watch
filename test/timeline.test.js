@@ -313,7 +313,9 @@ for (const change of ['snapshot-replaced', 'pending-changed', 'header-reformatte
     const original=fs.open; let triggered=false, snapshotOpens=0;
     fs.open=async(path,...args)=>{
       const target=String(path), file=await original(path,...args);
-      if(target===root && mutation==='close-error') file.close=async()=>{throw Error('PRIVATE')};
+      // Release the real descriptor before injecting failure; otherwise GC can
+      // add an unrelated warning to the exact safe-stderr assertion.
+      if(target===root && mutation==='close-error') {const close=file.close.bind(file);file.close=async()=>{await close();throw Error('PRIVATE')};}
       if(target.includes('/snapshot-')) snapshotOpens++;
       // First four opens validate all snapshots; the next opens revisit committed data.
       if(!triggered && snapshotOpens===5 && target.includes('/snapshot-')) {

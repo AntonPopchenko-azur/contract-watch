@@ -1,0 +1,116 @@
+[
+  {
+    "name": "eip-reference",
+    "code": "0x363d3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5bf3",
+    "status": "matched",
+    "target": "0xbebebebebebebebebebebebebebebebebebebebe"
+  },
+  {
+    "name": "ordered-bytes",
+    "code": "0x363d3d373d3d3d363d73000102030405060708090a0b0c0d0e0f101112135af43d82803e903d91602b57fd5bf3",
+    "status": "matched",
+    "target": "0x000102030405060708090a0b0c0d0e0f10111213"
+  },
+  {
+    "name": "zero",
+    "code": "0x363d3d373d3d3d363d7300000000000000000000000000000000000000005af43d82803e903d91602b57fd5bf3",
+    "status": "matched",
+    "target": "0x0000000000000000000000000000000000000000"
+  },
+  {
+    "name": "smallest-nonzero",
+    "code": "0x363d3d373d3d3d363d7300000000000000000000000000000000000000015af43d82803e903d91602b57fd5bf3",
+    "status": "matched",
+    "target": "0x0000000000000000000000000000000000000001"
+  },
+  {
+    "name": "high-bit",
+    "code": "0x363d3d373d3d3d363d7380000000000000000000000000000000000000005af43d82803e903d91602b57fd5bf3",
+    "status": "matched",
+    "target": "0x8000000000000000000000000000000000000000"
+  },
+  {
+    "name": "maximum",
+    "code": "0x363d3d373d3d3d363d73ffffffffffffffffffffffffffffffffffffffff5af43d82803e903d91602b57fd5bf3",
+    "status": "matched",
+    "target": "0xffffffffffffffffffffffffffffffffffffffff"
+  },
+  {
+    "name": "self",
+    "code": "0x363d3d373d3d3d363d7311111111111111111111111111111111111111115af43d82803e903d91602b57fd5bf3",
+    "status": "matched",
+    "target": "0x1111111111111111111111111111111111111111"
+  },
+  {
+    "name": "leading-four-zero-bytes",
+    "code": "0x363d3d373d3d3d363d7300000000bebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5bf3",
+    "status": "matched",
+    "target": "0x00000000bebebebebebebebebebebebebebebebe"
+  },
+  {
+    "name": "empty",
+    "code": "0x",
+    "status": "empty-code",
+    "target": null
+  },
+  {
+    "name": "ordinary-stop",
+    "code": "0x00",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "ordinary-program",
+    "code": "0x60006000",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "vanity-push16-eip-example",
+    "code": "0x363d3d373d3d3d363d6fbebebebebebebebebebebebebebebebe5af43d82803e903d91602757fd5bf3",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "push0-substitution",
+    "code": "0x365f3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5bf3",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "creation-wrapper",
+    "code": "0x3d602d80600a3d3981f3363d3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5bf3",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "prefixed-runtime",
+    "code": "0x00363d3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5bf3",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "appended-data",
+    "code": "0x363d3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5bf3deadbeef",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "appended-stop",
+    "code": "0x363d3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5bf300",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "truncated-return",
+    "code": "0x363d3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602b57fd5b",
+    "status": "no-supported-match",
+    "target": null
+  },
+  {
+    "name": "changed-jump",
+    "code": "0x363d3d373d3d3d363d73bebebebebebebebebebebebebebebebebebebebe5af43d82803e903d91602a57fd5bf3",
+    "status": "no-supported-match",
+    "target": null
+  }
+]

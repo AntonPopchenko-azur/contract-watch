@@ -32,7 +32,8 @@ Item 31 adds bounded explicit source-relative history branch revalidation on 202
 Item 32 adds explicit single-block EIP-1967 event/storage cross-checks on 2026-11-22.
 Item 33 adds bounded explicit EIP-1967 log recovery with a coverage journal on 2026-11-25.
 Item 34 adds explicit offline event-to-snapshot candidate correlation on 2026-11-28.
-Items 35–45 have not started.
+Item 35 adds explicit offline evidence for the exact EIP-1167 runtime on 2026-11-28.
+Items 36–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -385,10 +386,29 @@ There is no worker-owned scheduler or automatic endless backlog.
   compatible; no claim of authenticity, causation, completeness, finality or
   safety; no item 35 behavior, scheduler, dependency, release tag or npm publication.
 
+- [x] **35 — EIP-1167 minimal proxy evidence.** Add explicit offline
+  `minimal-proxy FILE` for strict saved snapshots v1–v4 with separate JSON v1
+  evidence. Match only the complete standard 45-byte deployed runtime, checked
+  against EIP-1167, and extract all target bytes at indices 10–29. Preserve
+  leading zeros and explicit zero/self flags with availability/behavior unverified.
+  Distinguish empty code, exact match and no supported match; vanity PUSHn,
+  PUSH0, init code, appended data and modified/truncated forms stay unsupported.
+  Bind target-code evidence and file fingerprints to source, snapshot version,
+  target, exact chain/block and recorded/unknown genesis. Never analyze separate
+  implementation code as proxy code or infer availability, safety or behavior.
+  Reuse strict bounded readers/validators with 512/768 KiB files, 128 KiB code
+  and 8 KiB output; preserve bytes/mtime/permissions and safe failure output.
+  Independent vectors plus 122 new unit/file/CLI tests cover fixed-byte/address
+  boundaries, versions, invalid/oversized input, file races, close failures,
+  preservation and no network/env access. Repair the existing timeline close-error
+  test's leaked descriptor without weakening its failure assertion. All 2631
+  tests pass in npm test and npm run check; demo and changed-JS syntax pass.
+  Document the primary source and exact contract in MINIMAL-PROXY.md.
+  Completed 2026-11-28. Existing output/schema/live protocols remain unchanged;
+  no target fetch, calls, writes, migration, recursion or item 36 behavior.
+
 ## Planned increments
 
-- [ ] **35 — EIP-1167 minimal proxy evidence.** Add narrowly specified bytecode
-  pattern fixtures, target extraction and explicit unsupported variants.
 - [ ] **36 — Proxy-path traversal.** Follow a bounded number of observed targets
   with cycle detection and consistent block selectors.
 - [ ] **37 — Provider capability check.** Diagnose required read support using
