@@ -1,0 +1,368 @@
+{
+  "kind": "contract-watch-event-range",
+  "schemaVersion": 1,
+  "status": "complete",
+  "source": "rpc",
+  "address": "0x1111111111111111111111111111111111111111",
+  "chainId": "1",
+  "expectedGenesisHash": "0x0000000000000000000000000000000000000000000000000000000000001388",
+  "range": {
+    "fromBlock": "0x64",
+    "toBlock": "0x68",
+    "toHash": "0x0000000000000000000000000000000000000000000000000000000000001774"
+  },
+  "completeness": "unverified",
+  "coverageVerified": true,
+  "failure": null,
+  "pages": [
+    {
+      "id": 1,
+      "parentId": null,
+      "depth": 0,
+      "fromBlock": "0x64",
+      "toBlock": "0x68",
+      "status": "split",
+      "attempt": 1,
+      "returnedLogs": null,
+      "duplicates": null,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": {
+        "code": "RANGE_PROVIDER_LIMIT",
+        "message": "RPC explicitly rejected this log query with limit-exceeded code -32005."
+      }
+    },
+    {
+      "id": 2,
+      "parentId": 1,
+      "depth": 1,
+      "fromBlock": "0x64",
+      "toBlock": "0x66",
+      "status": "split",
+      "attempt": 2,
+      "returnedLogs": null,
+      "duplicates": null,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": {
+        "code": "RANGE_PROVIDER_LIMIT",
+        "message": "RPC explicitly rejected this log query with limit-exceeded code -32005."
+      }
+    },
+    {
+      "id": 3,
+      "parentId": 1,
+      "depth": 1,
+      "fromBlock": "0x67",
+      "toBlock": "0x68",
+      "status": "split",
+      "attempt": 7,
+      "returnedLogs": null,
+      "duplicates": null,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": {
+        "code": "RANGE_PROVIDER_LIMIT",
+        "message": "RPC explicitly rejected this log query with limit-exceeded code -32005."
+      }
+    },
+    {
+      "id": 4,
+      "parentId": 2,
+      "depth": 2,
+      "fromBlock": "0x64",
+      "toBlock": "0x65",
+      "status": "split",
+      "attempt": 3,
+      "returnedLogs": null,
+      "duplicates": null,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": {
+        "code": "RANGE_PROVIDER_LIMIT",
+        "message": "RPC explicitly rejected this log query with limit-exceeded code -32005."
+      }
+    },
+    {
+      "id": 5,
+      "parentId": 2,
+      "depth": 2,
+      "fromBlock": "0x66",
+      "toBlock": "0x66",
+      "status": "read",
+      "attempt": 6,
+      "returnedLogs": 1,
+      "duplicates": 0,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": null
+    },
+    {
+      "id": 6,
+      "parentId": 4,
+      "depth": 3,
+      "fromBlock": "0x64",
+      "toBlock": "0x64",
+      "status": "read-empty",
+      "attempt": 4,
+      "returnedLogs": 0,
+      "duplicates": 0,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": null
+    },
+    {
+      "id": 7,
+      "parentId": 4,
+      "depth": 3,
+      "fromBlock": "0x65",
+      "toBlock": "0x65",
+      "status": "read",
+      "attempt": 5,
+      "returnedLogs": 2,
+      "duplicates": 0,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": null
+    },
+    {
+      "id": 8,
+      "parentId": 3,
+      "depth": 2,
+      "fromBlock": "0x67",
+      "toBlock": "0x67",
+      "status": "read",
+      "attempt": 8,
+      "returnedLogs": 1,
+      "duplicates": 0,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": null
+    },
+    {
+      "id": 9,
+      "parentId": 3,
+      "depth": 2,
+      "fromBlock": "0x68",
+      "toBlock": "0x68",
+      "status": "read-empty",
+      "attempt": 9,
+      "returnedLogs": 0,
+      "duplicates": 0,
+      "anchorBefore": true,
+      "anchorAfter": true,
+      "error": null
+    }
+  ],
+  "coverage": [
+    {
+      "number": "0x64",
+      "status": "read-empty",
+      "pageId": 6,
+      "uniqueLogs": 0
+    },
+    {
+      "number": "0x65",
+      "status": "read",
+      "pageId": 7,
+      "uniqueLogs": 2
+    },
+    {
+      "number": "0x66",
+      "status": "read",
+      "pageId": 5,
+      "uniqueLogs": 1
+    },
+    {
+      "number": "0x67",
+      "status": "read",
+      "pageId": 8,
+      "uniqueLogs": 1
+    },
+    {
+      "number": "0x68",
+      "status": "read-empty",
+      "pageId": 9,
+      "uniqueLogs": 0
+    }
+  ],
+  "blocks": [
+    {
+      "number": "0x64",
+      "hash": "0x0000000000000000000000000000000000000000000000000000000000001770",
+      "timestamp": "0x6553f100",
+      "transactions": [
+        "0x0000000000000000000000000000000000000000000000000000000000000064",
+        "0x0000000000000000000000000000000000000000000000000000000000000065",
+        "0x0000000000000000000000000000000000000000000000000000000000000066"
+      ],
+      "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000fff"
+    },
+    {
+      "number": "0x65",
+      "hash": "0x0000000000000000000000000000000000000000000000000000000000001771",
+      "timestamp": "0x6553f101",
+      "transactions": [
+        "0x00000000000000000000000000000000000000000000000000000000000000c8",
+        "0x00000000000000000000000000000000000000000000000000000000000000c9",
+        "0x00000000000000000000000000000000000000000000000000000000000000ca"
+      ],
+      "parentHash": "0x0000000000000000000000000000000000000000000000000000000000001770"
+    },
+    {
+      "number": "0x66",
+      "hash": "0x0000000000000000000000000000000000000000000000000000000000001772",
+      "timestamp": "0x6553f102",
+      "transactions": [
+        "0x000000000000000000000000000000000000000000000000000000000000012c",
+        "0x000000000000000000000000000000000000000000000000000000000000012d",
+        "0x000000000000000000000000000000000000000000000000000000000000012e"
+      ],
+      "parentHash": "0x0000000000000000000000000000000000000000000000000000000000001771"
+    },
+    {
+      "number": "0x67",
+      "hash": "0x0000000000000000000000000000000000000000000000000000000000001773",
+      "timestamp": "0x6553f103",
+      "transactions": [
+        "0x0000000000000000000000000000000000000000000000000000000000000190",
+        "0x0000000000000000000000000000000000000000000000000000000000000191",
+        "0x0000000000000000000000000000000000000000000000000000000000000192"
+      ],
+      "parentHash": "0x0000000000000000000000000000000000000000000000000000000000001772"
+    },
+    {
+      "number": "0x68",
+      "hash": "0x0000000000000000000000000000000000000000000000000000000000001774",
+      "timestamp": "0x6553f104",
+      "transactions": [
+        "0x00000000000000000000000000000000000000000000000000000000000001f4",
+        "0x00000000000000000000000000000000000000000000000000000000000001f5",
+        "0x00000000000000000000000000000000000000000000000000000000000001f6"
+      ],
+      "parentHash": "0x0000000000000000000000000000000000000000000000000000000000001773"
+    }
+  ],
+  "logs": [
+    {
+      "address": "0x1111111111111111111111111111111111111111",
+      "blockHash": "0x0000000000000000000000000000000000000000000000000000000000001771",
+      "blockNumber": "0x65",
+      "transactionHash": "0x00000000000000000000000000000000000000000000000000000000000000c8",
+      "transactionIndex": "0x0",
+      "logIndex": "0x2",
+      "removed": false,
+      "topics": [
+        "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b",
+        "0x0000000000000000000000003333333333333333333333333333333333333333"
+      ],
+      "data": "0x",
+      "event": "Upgraded",
+      "slot": "implementation",
+      "arguments": {
+        "implementation": "0x3333333333333333333333333333333333333333"
+      },
+      "valueWord": "0x0000000000000000000000003333333333333333333333333333333333333333",
+      "previousWord": null
+    },
+    {
+      "address": "0x1111111111111111111111111111111111111111",
+      "blockHash": "0x0000000000000000000000000000000000000000000000000000000000001771",
+      "blockNumber": "0x65",
+      "transactionHash": "0x00000000000000000000000000000000000000000000000000000000000000c9",
+      "transactionIndex": "0x1",
+      "logIndex": "0x7",
+      "removed": false,
+      "topics": [
+        "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b",
+        "0x0000000000000000000000002222222222222222222222222222222222222222"
+      ],
+      "data": "0x",
+      "event": "Upgraded",
+      "slot": "implementation",
+      "arguments": {
+        "implementation": "0x2222222222222222222222222222222222222222"
+      },
+      "valueWord": "0x0000000000000000000000002222222222222222222222222222222222222222",
+      "previousWord": null
+    },
+    {
+      "address": "0x1111111111111111111111111111111111111111",
+      "blockHash": "0x0000000000000000000000000000000000000000000000000000000000001772",
+      "blockNumber": "0x66",
+      "transactionHash": "0x000000000000000000000000000000000000000000000000000000000000012d",
+      "transactionIndex": "0x1",
+      "logIndex": "0x3",
+      "removed": false,
+      "blockTimestamp": "0x6553f102",
+      "topics": [
+        "0x7e644d79422f17c01e4894b5f4f588d331ebfa28653d42ae832dc59e38c9798f"
+      ],
+      "data": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000004444444444444444444444444444444444444444",
+      "event": "AdminChanged",
+      "slot": "admin",
+      "arguments": {
+        "previousAdmin": "0x0000000000000000000000000000000000000000",
+        "newAdmin": "0x4444444444444444444444444444444444444444"
+      },
+      "valueWord": "0x0000000000000000000000004444444444444444444444444444444444444444",
+      "previousWord": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "address": "0x1111111111111111111111111111111111111111",
+      "blockHash": "0x0000000000000000000000000000000000000000000000000000000000001773",
+      "blockNumber": "0x67",
+      "transactionHash": "0x0000000000000000000000000000000000000000000000000000000000000192",
+      "transactionIndex": "0x2",
+      "logIndex": "0x6",
+      "removed": false,
+      "topics": [
+        "0x1cf3b03a6cf19fa2baba4df148e9dcabedea7f8a5c07840e207e5c089be95d3e",
+        "0x0000000000000000000000005555555555555555555555555555555555555555"
+      ],
+      "data": "0x",
+      "event": "BeaconUpgraded",
+      "slot": "beacon",
+      "arguments": {
+        "beacon": "0x5555555555555555555555555555555555555555"
+      },
+      "valueWord": "0x0000000000000000000000005555555555555555555555555555555555555555",
+      "previousWord": null
+    }
+  ],
+  "verification": {
+    "startedAt": "2026-11-28T09:00:00.000Z",
+    "completedAt": "2026-11-28T09:00:01.000Z",
+    "phase": "complete",
+    "requests": 42,
+    "logRequests": 9,
+    "responseBytes": 50000,
+    "receivedLogs": 4,
+    "duplicateLogs": 0,
+    "rangeSha256": "347276450f5940be8198dc4bd1b7df3d50de98740873c744515ed5c5a8b43f90",
+    "chainGenesisRechecked": true
+  },
+  "limits": {
+    "blocks": 32,
+    "pages": 63,
+    "depth": 5,
+    "requests": 258,
+    "responseBytes": 16777216,
+    "receivedLogs": 1024,
+    "uniqueLogs": 512,
+    "transactions": 4096,
+    "reportBytes": 2097152,
+    "maxPages": 63,
+    "pageLogs": 256,
+    "pageResponseBytes": 262144,
+    "timeoutMs": 10000,
+    "deadlineMs": 30000
+  },
+  "caveats": [
+    "Synthetic fixture.",
+    "Completeness unverified.",
+    "No causal proof.",
+    "No independent ancestry proof.",
+    "No safety claim."
+  ]
+}

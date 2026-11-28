@@ -31,7 +31,8 @@ Item 30 adds opt-in consecutive-observation thresholds and explicit local validi
 Item 31 adds bounded explicit source-relative history branch revalidation on 2026-11-14.
 Item 32 adds explicit single-block EIP-1967 event/storage cross-checks on 2026-11-22.
 Item 33 adds bounded explicit EIP-1967 log recovery with a coverage journal on 2026-11-25.
-Items 34–45 have not started.
+Item 34 adds explicit offline event-to-snapshot candidate correlation on 2026-11-28.
+Items 35–45 have not started.
 Adjust priorities using real user needs and protocol evidence.
 
 One coordinator dispatch selects one unfinished item. A completed functional
@@ -362,10 +363,30 @@ There is no worker-owned scheduler or automatic endless backlog.
   snapshot/history/revalidation/watch contracts remain intact. No storage or
   historical correlation, durable checkpoint, scheduler or background work.
 
+- [x] **34 — Event-to-snapshot correlation.** Add explicit offline `history
+  correlate --dir HISTORY --events RANGE_REPORT` with separate JSON v1 output.
+  Require exact target/chain/recorded-genesis identity in RPC v4 history and
+  independently validate the complete range v1 structure, linked headers,
+  deterministic page coverage, ABI/provenance, decoded fields and counters.
+  Neighbors use the nearest consistent saved-header match strictly below and
+  at/above each event height, retaining every tie in index order. End-of-block
+  semantics, multiple events/A-B-A, raw value comparisons and endpoint changes
+  remain distinct from candidate-only association. Preserve full event and
+  snapshot provenance, unknown/forked/conflicting observations, retention gaps,
+  pending/stage counts and unavailable implementation evidence. Bound input to
+  2 MiB/32 headers/512 unique logs and existing history limits; output to 4 MiB.
+  Stable bounded reads/checkpoints preserve source bytes, metadata and permissions;
+  no RPC/env lookup, writes, history import or partial successful output occurs.
+  Independent fixtures and 144 new unit/file/CLI/loopback tests cover normal and
+  adversarial inputs, resource boundaries, races, offline operation and source
+  preservation. All 2509 tests pass in npm test and npm run check; demo and changed
+  JS syntax pass. Document selection first, then schema/evidence/limits in
+  CORRELATION.md. Completed 2026-11-28. Existing formats and live protocols stay
+  compatible; no claim of authenticity, causation, completeness, finality or
+  safety; no item 35 behavior, scheduler, dependency, release tag or npm publication.
+
 ## Planned increments
 
-- [ ] **34 — Event-to-snapshot correlation.** Link candidate events to nearby
-  observations while retaining transaction/block provenance and caveats.
 - [ ] **35 — EIP-1167 minimal proxy evidence.** Add narrowly specified bytecode
   pattern fixtures, target extraction and explicit unsupported variants.
 - [ ] **36 — Proxy-path traversal.** Follow a bounded number of observed targets

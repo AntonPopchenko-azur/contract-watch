@@ -15,6 +15,7 @@ import { runWatch } from '../src/watch.js';
 import { revalidateHistory } from '../src/revalidation.js';
 import { crossCheckEvents, eventCheckJson } from '../src/event-check.js';
 import { readEventRange, eventRangeJson } from '../src/event-range.js';
+import { correlateHistory, correlationJson } from '../src/correlation.js';
 
 const HELP = `Contract Watch 0.1.0 — read-only EIP-1967 snapshots (Node.js 22+)
 
@@ -32,6 +33,7 @@ Usage:
   contract-watch history prune --dir TARGET_DIR --keep-last N
   contract-watch history prune --dir TARGET_DIR --keep-last N --apply PLAN_ID --out-dir NEW
   contract-watch history revalidate --dir TARGET_DIR --anchor HASH --max-blocks N (--rpc URL | --rpc-env ENV) [--timeout-ms MS] [--deadline-ms MS]
+  contract-watch history correlate --dir TARGET_DIR --events RANGE_REPORT.json
   contract-watch events --address ADDRESS --chain-id ID --genesis-hash HASH --block-hash HASH (--rpc URL | --rpc-env ENV) [--timeout-ms MS] [--deadline-ms MS]
   contract-watch events-range --address ADDRESS --chain-id ID --genesis-hash HASH --from-block N --to-block N --to-hash HASH (--rpc URL | --rpc-env ENV) [--max-pages N] [--timeout-ms MS] [--deadline-ms MS]
   contract-watch inspect FILE
@@ -83,6 +85,12 @@ Max 63 log attempts (lower with --max-pages), 258 total RPC requests, 16 MiB bod
 Complete coverage exits 0; incomplete journal exits 1 and contains no partial logs.
 SIGINT/SIGTERM retain empty stdout and 130/143. No files or resume checkpoint.
 See docs/EVENT-RANGES.md; existing single-block events never falls back to ranges.
+
+Offline event correlation (separate JSON v1):
+  history correlate  Validate an explicit saved range report and RPC v4 history
+Nearest matching-header snapshots: before height < event, after height >= event.
+All ties retained; value comparisons are candidate-only, never proof of causation.
+No RPC/env lookup or writes. See docs/CORRELATION.md for identity and source limits.
 
 Snapshot options:
   --rpc URL           Explicit HTTP(S) endpoint (or CONTRACT_WATCH_RPC_URL)
@@ -326,6 +334,16 @@ async function main(args) {
     return;
   }
   if (args[0] === 'history') {
+    if (args[1] === 'correlate') {
+      const options = {}, keys = { '--dir': 'directory', '--events': 'events' };
+      for (let i = 2; i < args.length; i += 2) {
+        const key = Object.hasOwn(keys, args[i]) ? keys[args[i]] : undefined, value = args[i + 1];
+        if (!key || Object.hasOwn(options, key) || !value || value.startsWith('-')) fail('USAGE');
+        options[key] = value;
+      }
+      process.stdout.write(correlationJson(await correlateHistory(options)));
+      return;
+    }
     if (args[1] === 'revalidate') {
       const options = parseRevalidation(args.slice(2));
       await runLive(async operation => ({ stdout: `${JSON.stringify(await revalidateHistory(options, process.env, operation), null, 2)}\n` }));

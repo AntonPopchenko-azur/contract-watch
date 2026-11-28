@@ -1037,6 +1037,42 @@ are 10000 ms per request and a 30000 ms deadline. No resumable checkpoint is
 created: an explicit rerun starts from the original inputs. See the [range
 protocol, coverage journal and limits](docs/EVENT-RANGES.md) before automating.
 
+## Correlate saved events with history offline
+
+Select one existing history and one saved **complete events-range v1** report:
+
+```sh
+node bin/contract-watch.js history correlate --dir ./history --events ./range.json
+```
+
+The history must have RPC snapshot v4 identity with recorded genesis matching the
+report's exact target, chain and genesis. The importer checks the full structure,
+linked headers, page coverage, transaction provenance, raw ABI and derived fields;
+`complete` and `coverageVerified` flags alone are insufficient. Files remain
+unauthenticated evidence: an internally consistent report can still be forged.
+
+For each candidate, choose the nearest eligible snapshot height **strictly before**
+its block and the nearest **at or after** it. Eligibility requires the exact saved
+header hash and consistent observations. All same-height ties remain in index
+order. A snapshot is end-of-block state, so events in its block precede it.
+Outside-range observations, different hashes, contradictions, missing neighbors,
+pending/staged data and retention gaps stay explicit; no branch is guessed.
+
+The separate JSON v1 report retains event/transaction provenance and snapshot IDs,
+raw slot values, independent value comparisons and endpoint changes. Multiple
+events and A/B/A remain visible even when endpoints match. These are candidate
+associations, not proof of causation, complete events, finality, upgrades or safety.
+BeaconUpgraded still concerns the proxy beacon slot. Implementation observations
+that were skipped or not recorded remain unavailable.
+
+This command performs no RPC, environment lookup or file writes. Success exits 0,
+including unavailable or differing comparisons; errors have empty stdout and exit
+1. Range input is limited to 2 MiB, 32 headers and 512 unique events; history keeps
+its 128-entry/512-name limits. Output is at most 4 MiB. See the [selection, schema,
+validation and preservation contract](docs/CORRELATION.md) and [independent
+fixtures](test/fixtures/correlation/README.md). Existing live and offline formats
+remain unchanged.
+
 ## Record genesis identity
 
 Add the valueless `--genesis` flag to save **snapshot v4** with the RPC's observed

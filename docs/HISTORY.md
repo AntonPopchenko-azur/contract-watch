@@ -1,5 +1,10 @@
 # Explicit local history (versions 1 and 2)
 
+Added 2026-11-28, the separate read-only [`history correlate`](CORRELATION.md)
+command links candidate events from one explicitly selected saved range report
+to matching-header RPC v4 observations with recorded genesis. It validates and
+preserves the existing store; no event/report is imported into its index.
+
 Added 2026-10-15. History is an offline store of explicitly selected saved
 snapshots, separate from live capture. Init/add/verify/recover/timeline/prune do not read RPC/config environment
 variables, connect to a provider, migrate a snapshot, discover target folders,

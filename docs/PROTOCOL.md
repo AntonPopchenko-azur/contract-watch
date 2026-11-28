@@ -7,6 +7,9 @@ not change the capture/snapshot protocols below or permit generic arbitrary RPC.
 The separate [`events-range` command](EVENT-RANGES.md), added 2026-11-25, binds
 1–32 blocks with finite coded-limit subdivision and a distinct coverage journal.
 It does not change the single-block event report or correlate with snapshots.
+The separate offline [`history correlate`](CORRELATION.md), added 2026-11-28,
+validates a saved complete range report against explicit RPC v4 history and emits
+candidate associations. It does not change those live protocols or snapshot files.
 
 ## Local target selection
 

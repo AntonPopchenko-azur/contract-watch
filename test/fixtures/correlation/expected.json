@@ -1,0 +1,85 @@
+{
+  "relations": [
+    "matched",
+    "matched",
+    "matched",
+    "matched",
+    "matched"
+  ],
+  "intervals": [
+    {
+      "slot": "implementation",
+      "before": [
+        1
+      ],
+      "after": [
+        2
+      ],
+      "candidateIds": [
+        1,
+        2
+      ],
+      "endpointChange": "unchanged"
+    },
+    {
+      "slot": "admin",
+      "before": [
+        2
+      ],
+      "after": [
+        3
+      ],
+      "candidateIds": [
+        3
+      ],
+      "endpointChange": "changed"
+    },
+    {
+      "slot": "beacon",
+      "before": [
+        3
+      ],
+      "after": [
+        4
+      ],
+      "candidateIds": [
+        4
+      ],
+      "endpointChange": "changed"
+    }
+  ],
+  "candidates": [
+    {
+      "id": 1,
+      "before": "differs",
+      "after": "differs",
+      "sameBlockAsAfter": true,
+      "later": 1,
+      "last": 2
+    },
+    {
+      "id": 2,
+      "before": "matches",
+      "after": "matches",
+      "sameBlockAsAfter": true,
+      "later": 0,
+      "last": 2
+    },
+    {
+      "id": 3,
+      "before": "differs",
+      "after": "matches",
+      "sameBlockAsAfter": true,
+      "later": 0,
+      "last": 3
+    },
+    {
+      "id": 4,
+      "before": "differs",
+      "after": "matches",
+      "sameBlockAsAfter": true,
+      "later": 0,
+      "last": 4
+    }
+  ]
+}

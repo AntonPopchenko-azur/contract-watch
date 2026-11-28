@@ -7,6 +7,11 @@ read storage, code, receipts, snapshots or history, correlate events to saved
 observations, write files, or run in the background. The existing [`events`
 command](EVENTS.md) retains its single-block report, 11-request protocol and errors.
 
+The separate offline [`history correlate`](CORRELATION.md) command (2026-11-28)
+accepts a saved complete v1 report only after bounded consistency validation.
+It adds candidate links to explicitly selected history without modifying this
+command or authenticating/replaying the saved RPC checks.
+
 ## Explicit inputs
 
 ```sh
@@ -151,7 +156,8 @@ fields number/hash/timestamp/transactions/parentHash in that order. It is a loca
 fingerprint, not an Ethereum hash or proof. Failure has null digest and false
 chainGenesisRechecked. Duplicate counts include accepted leaves only. `limits`
 records bounds and selected maxPages/timeout/deadline; `caveats` retains evidence
-and recovery limitations. No importer or history schema is added. Snapshot v1–v4,
+and recovery limitations. This live command does not import reports or add a
+history schema. Snapshot v1–v4,
 diff, history, revalidation, watch and single-block event formats are unchanged.
 
 ## Bounds and delivery
